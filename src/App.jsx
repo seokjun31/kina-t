@@ -128,17 +128,40 @@ export default function App() {
     {nick:"테스트유저B", job:"치유성", atul:"88500", ilv:"1810", code:"TES2"},
   ];
 
-  useEffect(() => {
+useEffect(() => {
     (async () => {
-      const u = await load("kina:users");
-      if (u && u.length > 0) {
-        setUsers(u);
-      } else {
-        // storage에 유저가 없으면 테스트 유저 기본 등록
-        setUsers(DEFAULT_USERS);
-        await save("kina:users", DEFAULT_USERS);
+      // 1. Firebase에 저장된 기존 유저 정보 불러오기 (접속 코드 유지용)
+      let savedUsers = await load("kina:users") || [];
+
+      try {
+        // 2. 깃허브 액션이 갱신해준 크롤링 데이터(JSON) 불러오기
+        const res = await fetch('/aion2_legion_data.json');
+        const crawledData = await res.json();
+
+        if (crawledData && crawledData.length > 0) {
+          // 3. 기존 유저의 '접속 코드'는 유지하면서, 직업/아툴/템렙 등 최신 스펙만 덮어씌움
+          const mergedUsers = crawledData.map(crawledUser => {
+            const existingUser = savedUsers.find(u => u.nick === crawledUser.nick);
+            return {
+              ...crawledUser,
+              // 기존 유저면 기존 코드를 쓰고, 새로 가입한 유저면 크롤러가 만든 임시 코드를 줌
+              code: existingUser ? existingUser.code : crawledUser.code
+            };
+          });
+
+          setUsers(mergedUsers);
+          await save("kina:users", mergedUsers); // Firebase에도 최신화된 전체 목록 저장
+        } else {
+          setUsers(savedUsers.length > 0 ? savedUsers : DEFAULT_USERS);
+        }
+      } catch (error) {
+        console.error("크롤링 데이터 불러오기 실패:", error);
+        setUsers(savedUsers.length > 0 ? savedUsers : DEFAULT_USERS);
       }
-      const s = await load("kina:schedules"); if (s) setSchedules(s);
+
+      // 스케줄 데이터 불러오기
+      const s = await load("kina:schedules"); 
+      if (s) setSchedules(s);
     })();
   }, []);
 
