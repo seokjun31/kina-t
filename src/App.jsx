@@ -72,13 +72,14 @@ export default function App() {
   ];
 
 useEffect(() => {
-    // Firebase가 무응답(hang)일 때 무한 로딩 방지용 fallback 타이머 (8초)
+    // Firebase 무응답 대비 fallback 타이머 (15초) — Vercel 콜드스타트 여유 확보
     const fallbackTimer = setTimeout(() => {
       setIsLoading(false);
       setInitError("데이터 동기화 시간이 초과되었습니다. 네트워크를 확인하고 새로고침 해주세요.");
-    }, 8000);
+    }, 15000);
 
     (async () => {
+      let hasError = false;
       try {
       // 1. Firebase에 저장된 기존 유저 정보 불러오기 (접속 코드 유지용)
       let savedUsers = await load("kina:users") || [];
@@ -114,11 +115,13 @@ useEffect(() => {
       const s = await load("kina:schedules");
       if (s) setSchedules(s);
       } catch (fatalError) {
+        hasError = true;
         console.error("앱 초기화 실패:", fatalError);
         setInitError("데이터를 불러오는 중 오류가 발생했습니다. 네트워크 연결을 확인하고 새로고침 해주세요.");
       } finally {
-        clearTimeout(fallbackTimer); // 정상 완료 시 fallback 타이머 해제
+        clearTimeout(fallbackTimer); // 타이머 해제
         setIsLoading(false);
+        if (!hasError) setInitError(null); // 정상 로드 완료 시 타임아웃 에러 배너 제거
       }
     })();
   }, []);
