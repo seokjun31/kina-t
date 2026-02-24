@@ -2,18 +2,18 @@ name: Auto Crawler
 
 on:
   schedule:
-    # 한국 시간 기준 매시간 정각마다 실행되도록 설정 (UTC 0분)
+    # 한국 시간 기준 매시간 정각마다 실행 (UTC 기준)
     - cron: '0 * * * *'
-  workflow_dispatch: # 깃허브 홈페이지에서 수동으로 버튼을 눌러서 실행할 수 있게 해주는 옵션
+  workflow_dispatch: # GitHub 웹에서 수동 실행 가능
 
 permissions:
-  contents: write # 깃허브 봇이 업데이트된 데이터를 다시 깃허브에 쓸 수 있도록 권한 부여
+  contents: write
 
 jobs:
   crawl-and-update:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. 내 코드 가져오기
+      - name: 1. 코드 가져오기
         uses: actions/checkout@v3
 
       - name: 2. Node.js 환경 세팅
@@ -21,13 +21,20 @@ jobs:
         with:
           node-version: '18'
 
-      - name: 3. 필요한 패키지 설치 (Puppeteer 등)
+      - name: 3. 패키지 설치
         run: npm install
 
-      - name: 4. 크롤러 스크립트 실행
+      - name: 4. 크롤러 실행 (Firebase 직접 저장)
         run: node crawler.js
+        env:
+          FIREBASE_API_KEY:             ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN:         ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID:          ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET:      ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID:              ${{ secrets.FIREBASE_APP_ID }}
 
-      - name: 5. 새로 수집된 데이터를 깃허브에 저장(Push)
+      - name: 5. JSON 파일 변경사항 커밋 & 푸시
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'

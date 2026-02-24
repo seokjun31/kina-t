@@ -1,68 +1,156 @@
+/* ─── 기본 리셋 ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  color-scheme: dark;
+  color: #e2d9f3;
+  background-color: #0a0a14;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
+  min-height: 100vh;
+  background-color: #0a0a14;
+}
+
+#root {
   min-height: 100vh;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* ─── 스크롤바 ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a14;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a3a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a5a;
 }
 
+/* ─── 반응형 레이아웃 유틸리티 ─────────────────────────────────────────────── */
+
+/* 날짜 탭 스크롤 (모바일 < PC 자동 wrap) */
+.date-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+.date-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* 슬롯 그리드 - 모바일: 3~4열, PC: 6~8열 */
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+/* 파티 카드 그리드 - 모바일: 1열, 태블릿: 2열, PC: 3열 */
+.party-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* ─── PC (768px 이상) ───────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .slot-grid {
+    grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+  }
+
+  /* 날짜 탭: PC에서는 스크롤 없이 wrap */
+  .date-tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  /* 모달 크기 조정 */
+  .modal-content {
+    max-width: 580px;
+  }
+}
+
+/* ─── 넓은 PC (1024px 이상) ─────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .slot-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .party-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  /* 헤더 최대폭 */
+  .app-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* 탭 바 최대폭 */
+  .app-tabs-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+}
+
+/* ─── 애니메이션 ────────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.slide-up {
+  animation: slideUp 0.25s ease-out;
+}
+
+/* ─── 버튼 기본 리셋 ────────────────────────────────────────────────────────── */
 button {
   border-radius: 8px;
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: all 0.2s;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+button:focus-visible {
+  outline: 2px solid #6d4aff;
+  outline-offset: 2px;
+}
+
+/* ─── 텍스트 선택 방지 (UI 요소) ──────────────────────────────────────────── */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
 }
