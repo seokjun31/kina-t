@@ -72,6 +72,12 @@ export default function App() {
   ];
 
 useEffect(() => {
+    // Firebase가 무응답(hang)일 때 무한 로딩 방지용 fallback 타이머 (8초)
+    const fallbackTimer = setTimeout(() => {
+      setIsLoading(false);
+      setInitError("데이터 동기화 시간이 초과되었습니다. 네트워크를 확인하고 새로고침 해주세요.");
+    }, 8000);
+
     (async () => {
       try {
       // 1. Firebase에 저장된 기존 유저 정보 불러오기 (접속 코드 유지용)
@@ -111,7 +117,8 @@ useEffect(() => {
         console.error("앱 초기화 실패:", fatalError);
         setInitError("데이터를 불러오는 중 오류가 발생했습니다. 네트워크 연결을 확인하고 새로고침 해주세요.");
       } finally {
-        setIsLoading(false); // 성공/실패 관계없이 로딩 완료
+        clearTimeout(fallbackTimer); // 정상 완료 시 fallback 타이머 해제
+        setIsLoading(false);
       }
     })();
   }, []);
