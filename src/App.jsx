@@ -28,6 +28,7 @@ export default function App() {
 
   const [users, setUsers] = useState([]);
   const [initError, setInitError] = useState(null); // 초기화 에러 상태
+  const [isLoading, setIsLoading] = useState(true); // 데이터 로딩 완료 전까지 true
   // schedules[type][dateStr][slot] = {
   //   members: [{nick, job, isLeader, classes:[]}],
   //   requiredClasses: ["치유성","검성",...],  // 방장이 지정한 필요 클래스 (7자리)
@@ -109,6 +110,8 @@ useEffect(() => {
       } catch (fatalError) {
         console.error("앱 초기화 실패:", fatalError);
         setInitError("데이터를 불러오는 중 오류가 발생했습니다. 네트워크 연결을 확인하고 새로고침 해주세요.");
+      } finally {
+        setIsLoading(false); // 성공/실패 관계없이 로딩 완료
       }
     })();
   }, []);
@@ -181,9 +184,10 @@ useEffect(() => {
 
   const findMyOtherSlot = (sd, type, date, slot) => {
     for (const [t, dates] of Object.entries(sd)) {
+      if (t !== type) continue; // 성역↔추가 독립: 같은 타입 내에서만 중복 체크
       for (const [d, slots] of Object.entries(dates || {})) {
         for (const [sl, sdata] of Object.entries(slots)) {
-          if (t === type && d === date && sl === slot) continue;
+          if (d === date && sl === slot) continue;
           if (sdata.members?.find(m => m.nick === user.nick)) return {fromType:t, d, sl};
           if (sdata.pendingRequests?.find(m => m.nick === user.nick)) return {fromType:t, d, sl, isPending:true};
         }
@@ -233,9 +237,15 @@ useEffect(() => {
     const wasLeader = slotData.members[idx].isLeader;
     const upd = slotData.members.filter(m => m.nick !== user.nick);
     if (wasLeader && upd.length > 0) upd[0].isLeader = true;
-    // 방장이 나가면 공지 초기화
-    if (wasLeader) slotData.notice = "";
     slotData.members = upd;
+    if (upd.length === 0) {
+      // 방이 완전히 비면 공지·직업제한·파티배치 전체 초기화
+      slotData.notice = "";
+      slotData.requiredClasses = [];
+      slotData.namedGroups = {group1:[], group2:[]};
+    } else if (wasLeader) {
+      slotData.notice = ""; // 방장이 나가면 공지만 초기화
+    }
     setSchedules({...sd}); persist(users, sd); setSlotModal(null);
     showToast("참석 취소되었습니다.", "#f97316");
   };
@@ -291,6 +301,12 @@ useEffect(() => {
       const upd = slotData.members.filter(m => m.nick !== nick);
       if (slotData.members[idx].isLeader && upd.length > 0) upd[0].isLeader = true;
       slotData.members = upd;
+      if (upd.length === 0) {
+        // 방이 완전히 비면 공지·직업제한·파티배치 전체 초기화
+        slotData.notice = "";
+        slotData.requiredClasses = [];
+        slotData.namedGroups = {group1:[], group2:[]};
+      }
     }
     // pending도 제거
     slotData.pendingRequests = slotData.pendingRequests?.filter(m => m.nick !== nick) || [];
@@ -684,84 +700,90 @@ useEffect(() => {
               );
             })()}
 
-            {/* 7자리 카드 그리드 */}
-            <p style={{fontSize:11,color:"#555",fontWeight:600,marginBottom:8,letterSpacing:1}}>⚔ 파티원 (7자리)</p>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:8}}>
-              {Array.from({length:7}).map((_,idx) => {
-                const nonLeaders = members.filter(m => !m.isLeader);
-                const m = nonLeaders[idx];
-                const slotRequired = (sd.requiredClasses||[])[idx] || null;
-                return (
-                  <div key={idx} style={{
-                    borderRadius:12,border:`1px solid ${m ? "#2a2a3a" : isLeader && slotRequired ? CLASS_COLORS[slotRequired]+"55" : "#1a1a24"}`,
-                    background: m ? "#0d0d18" : isLeader && slotRequired ? CLASS_COLORS[slotRequired]+"0d" : "#0a0a10",
-                    padding:"12px 10px",position:"relative",minHeight:88,
-                    display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4
-                  }}>
-                    {/* 자리 번호 */}
-                    <span style={{position:"absolute",top:5,left:8,fontSize:9,color:"#333",fontWeight:700}}>#{idx+1}</span>
+            {/* 파티원 카드 그리드: 성역=7자리(직업지정가능) / 추가모집=15자리(자유) */}
+            {(() => {
+              const partyCount = isPartySlot ? max - 1 : 7;
+              const colMin = isPartySlot ? 90 : 130;
+              return (
+                <>
+                  <p style={{fontSize:11,color:"#555",fontWeight:600,marginBottom:8,letterSpacing:1}}>
+                    ⚔ 파티원 ({partyCount}자리){isPartySlot ? " · 직업 자유" : ""}
+                  </p>
+                  <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${colMin}px,1fr))`,gap:isPartySlot?6:8}}>
+                    {Array.from({length:partyCount}).map((_,idx) => {
+                      const nonLeaders = members.filter(m => !m.isLeader);
+                      const m = nonLeaders[idx];
+                      const slotRequired = !isPartySlot ? ((sd.requiredClasses||[])[idx] || null) : null;
+                      return (
+                        <div key={idx} style={{
+                          borderRadius:12,border:`1px solid ${m ? "#2a2a3a" : isLeader && slotRequired ? CLASS_COLORS[slotRequired]+"55" : "#1a1a24"}`,
+                          background: m ? "#0d0d18" : isLeader && slotRequired ? CLASS_COLORS[slotRequired]+"0d" : "#0a0a10",
+                          padding:isPartySlot?"8px 6px":"12px 10px",position:"relative",minHeight:isPartySlot?68:88,
+                          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4
+                        }}>
+                          <span style={{position:"absolute",top:5,left:8,fontSize:9,color:"#333",fontWeight:700}}>#{idx+1}</span>
 
-                    {/* 방장 클래스 지정 버튼 */}
-                    {isLeader && !m && (
-                      <div style={{position:"absolute",top:4,right:4}}>
-                        <select
-                          value={slotRequired||""}
-                          onChange={e => {
-                            const sd2 = JSON.parse(JSON.stringify(schedules));
-                            if (!sd2[type]?.[date]?.[slot]) return;
-                            const req = [...(sd2[type][date][slot].requiredClasses||[])];
-                            while(req.length < 7) req.push(null);
-                            req[idx] = e.target.value || null;
-                            sd2[type][date][slot].requiredClasses = req.filter((_,i)=>i<=idx||req[i]);
-                            // sparse array를 7길이로 맞춤
-                            sd2[type][date][slot].requiredClasses = Array.from({length:7},(_,i)=>req[i]||null);
-                            setSchedules({...sd2}); persist(users, sd2);
-                          }}
-                          style={{fontSize:9,background:"#0a0a14",border:"1px solid #2a2a3a",borderRadius:6,color:"#666",cursor:"pointer",padding:"1px 2px",maxWidth:56}}
-                          onClick={e=>e.stopPropagation()}
-                        >
-                          <option value="">자유</option>
-                          {CLASSES.map(c=><option key={c} value={c}>{CLASS_ICONS[c]} {c}</option>)}
-                        </select>
-                      </div>
-                    )}
+                          {/* 방장 클래스 지정 버튼 (성역만) */}
+                          {!isPartySlot && isLeader && !m && (
+                            <div style={{position:"absolute",top:4,right:4}}>
+                              <select
+                                value={slotRequired||""}
+                                onChange={e => {
+                                  const sd2 = JSON.parse(JSON.stringify(schedules));
+                                  if (!sd2[type]?.[date]?.[slot]) return;
+                                  const req = [...(sd2[type][date][slot].requiredClasses||[])];
+                                  while(req.length < 7) req.push(null);
+                                  req[idx] = e.target.value || null;
+                                  sd2[type][date][slot].requiredClasses = req.filter((_,i)=>i<=idx||req[i]);
+                                  sd2[type][date][slot].requiredClasses = Array.from({length:7},(_,i)=>req[i]||null);
+                                  setSchedules({...sd2}); persist(users, sd2);
+                                }}
+                                style={{fontSize:9,background:"#0a0a14",border:"1px solid #2a2a3a",borderRadius:6,color:"#666",cursor:"pointer",padding:"1px 2px",maxWidth:56}}
+                                onClick={e=>e.stopPropagation()}
+                              >
+                                <option value="">자유</option>
+                                {CLASSES.map(c=><option key={c} value={c}>{CLASS_ICONS[c]} {c}</option>)}
+                              </select>
+                            </div>
+                          )}
 
-                    {m ? (
-                      <>
-                        <div style={{fontSize:22}}>{m.job ? CLASS_ICONS[m.job]||"👤" : "👤"}</div>
-                        <div style={{fontSize:12,fontWeight:700,color:"#e2d9f3",textAlign:"center",lineHeight:1.3}}>{m.nick}</div>
-                        {m.job && (
-                          <div style={{fontSize:10,color:CLASS_COLORS[m.job]||"#555",fontWeight:600}}>{m.job}</div>
-                        )}
-                        {(() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>아툴 {uInfo.atul}</div> : null; })()}
-                        {m.nick===user?.nick && (
-                          <span style={{fontSize:9,background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",padding:"1px 5px",borderRadius:10}}>나</span>
-                        )}
-                        {isLeader && m.nick!==user?.nick && (
-                          <button onClick={e=>{e.stopPropagation();setKickConfirm({type,date,slot,nick:m.nick});}}
-                            style={{marginTop:2,background:"rgba(127,29,29,.4)",border:"1px solid #7f1d1d",color:"#fca5a5",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600}}>퇴출</button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {slotRequired ? (
-                          <>
-                            <div style={{fontSize:22,opacity:0.4}}>{CLASS_ICONS[slotRequired]}</div>
-                            <div style={{fontSize:10,color:CLASS_COLORS[slotRequired],fontWeight:700}}>{slotRequired}</div>
-                            <div style={{fontSize:9,color:"#333"}}>모집중</div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{fontSize:20,opacity:0.15}}>＋</div>
-                            <div style={{fontSize:10,color:"#2a2a3a"}}>빈 자리</div>
-                          </>
-                        )}
-                      </>
-                    )}
+                          {m ? (
+                            <>
+                              <div style={{fontSize:isPartySlot?16:22}}>{m.job ? CLASS_ICONS[m.job]||"👤" : "👤"}</div>
+                              <div style={{fontSize:isPartySlot?10:12,fontWeight:700,color:"#e2d9f3",textAlign:"center",lineHeight:1.3}}>{m.nick}</div>
+                              {m.job && <div style={{fontSize:9,color:CLASS_COLORS[m.job]||"#555",fontWeight:600}}>{m.job}</div>}
+                              {(() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>아툴 {uInfo.atul}</div> : null; })()}
+                              {m.nick===user?.nick && (
+                                <span style={{fontSize:9,background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",padding:"1px 5px",borderRadius:10}}>나</span>
+                              )}
+                              {isLeader && m.nick!==user?.nick && (
+                                <button onClick={e=>{e.stopPropagation();setKickConfirm({type,date,slot,nick:m.nick});}}
+                                  style={{marginTop:2,background:"rgba(127,29,29,.4)",border:"1px solid #7f1d1d",color:"#fca5a5",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600}}>퇴출</button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {slotRequired ? (
+                                <>
+                                  <div style={{fontSize:22,opacity:0.4}}>{CLASS_ICONS[slotRequired]}</div>
+                                  <div style={{fontSize:10,color:CLASS_COLORS[slotRequired],fontWeight:700}}>{slotRequired}</div>
+                                  <div style={{fontSize:9,color:"#333"}}>모집중</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div style={{fontSize:isPartySlot?16:20,opacity:0.15}}>＋</div>
+                                  <div style={{fontSize:isPartySlot?9:10,color:"#2a2a3a"}}>빈 자리</div>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                </>
+              );
+            })()}
 
             {/* 대기 신청자 (방장에게만) */}
             {isLeader && pending.length > 0 && (
@@ -986,25 +1008,33 @@ useEffect(() => {
     const {type, date, slot} = namedGroupModal;
     const sd = getSlotData(schedules, type, date, slot);
     const members = sd.members || [];
-    const namedGroups = sd.namedGroups || {group1: [], group2: []};
+    // group2 undefined 방지: 항상 두 키 보장
+    const rawGroups = sd.namedGroups || {};
+    const namedGroups = { group1: rawGroups.group1 || [], group2: rawGroups.group2 || [] };
     const allNicks = members.map(m => m.nick);
-    const assigned = [...(namedGroups.group1 || []), ...(namedGroups.group2 || [])];
+    const assigned = [...namedGroups.group1, ...namedGroups.group2];
     const unassigned = allNicks.filter(n => !assigned.includes(n));
+    // 방장 여부 (방장만 DnD 가능)
+    const isLeaderHere = !!members.find(m => m.nick === user?.nick && m.isLeader);
 
     const saveGroups = (newGroups) => {
       const newSd = JSON.parse(JSON.stringify(schedules));
       if (!newSd[type]?.[date]?.[slot]) return;
-      newSd[type][date][slot].namedGroups = newGroups;
+      newSd[type][date][slot].namedGroups = {
+        group1: newGroups.group1 || [],
+        group2: newGroups.group2 || []
+      };
       setSchedules({...newSd}); persist(users, newSd);
     };
 
     const handleDrop = (e, targetGroup) => {
+      if (!isLeaderHere) return; // 방장만 이동 가능
       e.preventDefault();
       const nick = e.dataTransfer.getData("nick");
       if (!nick) return;
       const newGroups = {
-        group1: (namedGroups.group1 || []).filter(n => n !== nick),
-        group2: (namedGroups.group2 || []).filter(n => n !== nick),
+        group1: namedGroups.group1.filter(n => n !== nick),
+        group2: namedGroups.group2.filter(n => n !== nick),
       };
       if (targetGroup !== "unassigned") {
         if (newGroups[targetGroup].length >= 4) { showToast("각 그룹은 최대 4명입니다.", "#eab308"); return; }
@@ -1018,9 +1048,10 @@ useEffect(() => {
       const uInfo = users.find(u => u.nick === nick);
       if (!member) return null;
       return (
-        <div key={nick} draggable
-          onDragStart={e => { e.dataTransfer.setData("nick", nick); }}
-          style={{background:"#0d0d18",border:`1px solid ${CLASS_COLORS[member.job]||"#2a2a3a"}`,borderRadius:10,padding:"8px 10px",cursor:"grab",userSelect:"none",display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <div key={nick}
+          draggable={isLeaderHere}
+          onDragStart={isLeaderHere ? (e => { e.dataTransfer.setData("nick", nick); }) : undefined}
+          style={{background:"#0d0d18",border:`1px solid ${CLASS_COLORS[member.job]||"#2a2a3a"}`,borderRadius:10,padding:"8px 10px",cursor:isLeaderHere?"grab":"default",userSelect:"none",display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
           <div style={{fontSize:20}}>{CLASS_ICONS[member.job]||"👤"}</div>
           <div style={{flex:1}}>
             <div style={{fontSize:12,fontWeight:700,color:member.isLeader?"#fbbf24":"#e2d9f3"}}>{member.isLeader?"👑 ":""}{nick}</div>
@@ -1033,14 +1064,14 @@ useEffect(() => {
 
     const renderZone = (groupKey, title, color) => (
       <div style={{flex:1,minWidth:150}}
-        onDragOver={e=>e.preventDefault()}
-        onDrop={e=>handleDrop(e,groupKey)}>
+        onDragOver={isLeaderHere ? (e=>e.preventDefault()) : undefined}
+        onDrop={isLeaderHere ? (e=>handleDrop(e,groupKey)) : undefined}>
         <div style={{background:`${color}0d`,border:`1px dashed ${color}66`,borderRadius:12,padding:12,minHeight:200}}>
           <div style={{fontSize:12,fontWeight:700,color,marginBottom:10,textAlign:"center"}}>
-            {title} ({(namedGroups[groupKey]||[]).length}/4)
+            {title} ({namedGroups[groupKey].length}/4)
           </div>
-          {(namedGroups[groupKey]||[]).map(nick => renderCard(nick))}
-          {(namedGroups[groupKey]||[]).length < 4 && (
+          {namedGroups[groupKey].map(nick => renderCard(nick))}
+          {isLeaderHere && namedGroups[groupKey].length < 4 && (
             <div style={{border:"1px dashed #1a1a28",borderRadius:8,padding:"10px 0",textAlign:"center",color:"#2a2a3a",fontSize:11,marginTop:4}}>여기에 드롭</div>
           )}
         </div>
@@ -1055,16 +1086,20 @@ useEffect(() => {
             <h3 style={{fontSize:16,fontWeight:700,color:"#22c55e"}}>🏠 방 구성 — 1네임드 / 2네임드</h3>
             <button onClick={()=>setNamedGroupModal(null)} style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"5px 11px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
           </div>
-          <p style={{fontSize:11,color:"#555",marginBottom:16}}>멤버를 드래그앤드롭으로 각 네임드 그룹에 배치하세요. 방장 및 참석자 모두 배치 가능합니다.</p>
+          <p style={{fontSize:11,color:isLeaderHere?"#555":"#eab308",marginBottom:16}}>
+            {isLeaderHere
+              ? "멤버를 드래그앤드롭으로 각 네임드 그룹에 배치하세요. (방장만 배치 가능)"
+              : "⚠️ 배치는 방장만 가능합니다. 현재 보기 전용입니다."}
+          </p>
           <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
             {renderZone("group1","⚔️ 1네임드","#a78bfa")}
             {renderZone("group2","⚔️ 2네임드","#22c55e")}
           </div>
           {unassigned.length > 0 && (
             <div style={{background:"#0a0a10",border:"1px dashed #2a2a3a",borderRadius:12,padding:12}}
-              onDragOver={e=>e.preventDefault()}
-              onDrop={e=>handleDrop(e,"unassigned")}>
-              <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:8}}>⏳ 미배치 ({unassigned.length}명) — 드래그하여 그룹에 배치하세요</div>
+              onDragOver={isLeaderHere ? (e=>e.preventDefault()) : undefined}
+              onDrop={isLeaderHere ? (e=>handleDrop(e,"unassigned")) : undefined}>
+              <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:8}}>⏳ 미배치 ({unassigned.length}명){isLeaderHere?" — 드래그하여 그룹에 배치하세요":""}</div>
               {unassigned.map(nick => renderCard(nick))}
             </div>
           )}
@@ -1080,6 +1115,24 @@ useEffect(() => {
   // ─────────────────────────────────────────────────────────────────────────────
   // 최종 렌더
   // ─────────────────────────────────────────────────────────────────────────────
+  // ── 로딩 화면 ────────────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div style={{minHeight:"100vh",background:"#08080f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:24,fontFamily:"'Noto Sans KR',sans-serif"}}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700;900&display=swap');
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+        `}</style>
+        <div style={{width:56,height:56,border:"4px solid #1e1e30",borderTop:"4px solid #a78bfa",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:15,fontWeight:700,color:"#a78bfa",marginBottom:8,animation:"pulse 1.5s ease-in-out infinite"}}>데이터를 동기화 중입니다</div>
+          <div style={{fontSize:12,color:"#3a3a5a"}}>잠시만 기다려주세요...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{minHeight:"100vh", background:"#08080f", color:"#e2d9f3", fontFamily:"'Noto Sans KR',sans-serif"}}>
       <style>{`
