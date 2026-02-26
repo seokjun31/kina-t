@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+﻿import React, { useState, useEffect, useCallback, useRef } from "react";
 // ─── 유틸리티 (src/utils/, src/hooks/ 로 분리됨) ────────────────────────────
 import { ADMIN_CODE, CLASSES, CLASS_COLORS, CLASS_ICONS, SLOTS, WEEK_DAYS, maxOf } from './utils/constants';
 import { CLASS_IMAGES } from './utils/classIcons';
@@ -10,7 +10,6 @@ import MainLayout from './views/MainLayout.jsx';
 import { AION_LOGO } from './utils/logo';
 
 // ─── Storage (Firebase Firestore로 완벽 교체) ──────────────────────────────────────────────────────────────────
-// Firebase 데이터 접근 래퍼 (내부 구현은 src/hooks/useFirestore.js 참조)
 const load = async (k) => {
   try { return await loadData(k); } catch (e) { console.error("Firebase 로드 실패:", e); return null; }
 };
@@ -39,14 +38,9 @@ export default function App() {
   const [loginError, setLoginError] = useState("");
 
   const [users, setUsers] = useState([]);
-  const [initError, setInitError] = useState(null); // 초기화 에러 상태
-  const [isLoading, setIsLoading] = useState(true); // 데이터 로딩 완료 전까지 true
-  // schedules[type][dateStr][slot] = {
-  //   members: [{nick, job, isLeader, classes:[]}],
-  //   requiredClasses: ["치유성","검성",...],  // 방장이 지정한 필요 클래스 (7자리)
-  //   pendingRequests: [{nick, job}],           // 참가 신청 대기
-  //   notice: ""
-  // }
+  const [initError, setInitError] = useState(null); 
+  const [isLoading, setIsLoading] = useState(true); 
+
   const [schedules, setSchedules] = useState({"성역":{},"성역2":{},"추가":{}});
 
   const [tab, setTab] = useState("schedule");
@@ -57,18 +51,16 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [adminView, setAdminView] = useState("users");
   const [adminSearchQuery, setAdminSearchQuery] = useState("");
-  const [adminAddTarget, setAdminAddTarget] = useState(null); // {type,date,slot}
+  const [adminAddTarget, setAdminAddTarget] = useState(null); 
   const [noticeEdit, setNoticeEdit] = useState("");
   const [editingNotice, setEditingNotice] = useState(false);
   const [classEditing, setClassEditing] = useState(false);
-  const [namedGroupModal, setNamedGroupModal] = useState(null); // {type, date, slot}
-  // 추가모집 파티 생성 draft: {requiredClasses:[], notice:""}
+  const [namedGroupModal, setNamedGroupModal] = useState(null); 
   const [extraDraft, setExtraDraft] = useState(null);
   const [slotAddSearch, setSlotAddSearch] = useState("");
   const [adminCode, setAdminCode] = useState(ADMIN_CODE);
   const [raidNames, setRaidNames] = useState({ primary:"성역", secondary:"성역2" });
 
-  // 현재 시간 상태 (1분마다 갱신 → 자동 마감 반영)
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000);
@@ -95,14 +87,12 @@ export default function App() {
     setTimeout(() => setToast(null), 2800);
   };
 
-  // 테스트용 기본 유저 (storage에 없을 때만 사용)
   const DEFAULT_USERS = [
     {nick:"테스트유저A", job:"검성", atul:"92000", ilv:"1830", code:"TEST"},
     {nick:"테스트유저B", job:"치유성", atul:"88500", ilv:"1810", code:"TES2"},
   ];
 
-useEffect(() => {
-    // Firebase 무응답 대비 fallback 타이머 (15초) — Vercel 콜드스타트 여유 확보
+  useEffect(() => {
     const fallbackTimer = setTimeout(() => {
       setIsLoading(false);
       setInitError("데이터 동기화 시간이 초과되었습니다. 네트워크를 확인하고 새로고침 해주세요.");
@@ -111,75 +101,70 @@ useEffect(() => {
     (async () => {
       let hasError = false;
       try {
-      // 1. Firebase에 저장된 기존 유저 정보 불러오기 (접속 코드 유지용)
-      let savedUsers = await load("kina:users") || [];
-      const nowMs = Date.now();
-      const cleanedSavedUsers = savedUsers.map(u => {
-        if (!u.accessCode || !u.codeExpiresAt) return { ...u, accessCode:null, codeExpiresAt:null };
-        const expMs = new Date(u.codeExpiresAt).getTime();
-        if (!expMs || expMs <= nowMs) {
-          return { ...u, accessCode:null, codeExpiresAt:null };
-        }
-        return u;
-      });
+        let savedUsers = await load("kina:users") || [];
+        const nowMs = Date.now();
+        const cleanedSavedUsers = savedUsers.map(u => {
+          if (!u.accessCode || !u.codeExpiresAt) return { ...u, accessCode:null, codeExpiresAt:null };
+          const expMs = new Date(u.codeExpiresAt).getTime();
+          if (!expMs || expMs <= nowMs) {
+            return { ...u, accessCode:null, codeExpiresAt:null };
+          }
+          return u;
+        });
 
-      try {
-        // 2. 깃허브 액션이 갱신해준 크롤링 데이터(JSON) 불러오기
-        const res = await fetch('/aion2_legion_data.json');
-        if (!res.ok) throw new Error(`JSON 로드 실패: ${res.status}`);
-        const crawledData = await res.json();
+        try {
+          const res = await fetch('/aion2_legion_data.json');
+          if (!res.ok) throw new Error(`JSON 로드 실패: ${res.status}`);
+          const crawledData = await res.json();
 
-        if (crawledData && crawledData.length > 0) {
-          // 3. 기존 유저의 '접속 코드'는 유지하면서, 직업/아툴/템렙 등 최신 스펙만 덮어씌움
-          const mergedUsers = crawledData.map(crawledUser => {
-            const existingUser = cleanedSavedUsers.find(u => u.nick === crawledUser.nick);
-            return {
-              ...crawledUser,
-              accessCode: existingUser?.accessCode || null,
-              codeExpiresAt: existingUser?.codeExpiresAt || null,
-            };
-          }).map(u => {
-            if (!u.accessCode || !u.codeExpiresAt) return { ...u, accessCode:null, codeExpiresAt:null };
-            const expMs = new Date(u.codeExpiresAt).getTime();
-            if (!expMs || expMs <= nowMs) return { ...u, accessCode:null, codeExpiresAt:null };
-            return u;
-          });
+          if (crawledData && crawledData.length > 0) {
+            const mergedUsers = crawledData.map(crawledUser => {
+              const existingUser = cleanedSavedUsers.find(u => u.nick === crawledUser.nick);
+              return {
+                ...crawledUser,
+                accessCode: existingUser?.accessCode || null,
+                codeExpiresAt: existingUser?.codeExpiresAt || null,
+              };
+            }).map(u => {
+              if (!u.accessCode || !u.codeExpiresAt) return { ...u, accessCode:null, codeExpiresAt:null };
+              const expMs = new Date(u.codeExpiresAt).getTime();
+              if (!expMs || expMs <= nowMs) return { ...u, accessCode:null, codeExpiresAt:null };
+              return u;
+            });
 
-          setUsers(mergedUsers);
-          await save("kina:users", mergedUsers); // Firebase에도 최신화된 전체 목록 저장
-        } else {
+            setUsers(mergedUsers);
+            await save("kina:users", mergedUsers); 
+          } else {
+            setUsers(cleanedSavedUsers.length > 0 ? cleanedSavedUsers : DEFAULT_USERS);
+          }
+        } catch (error) {
+          console.error("크롤링 데이터 불러오기 실패:", error);
           setUsers(cleanedSavedUsers.length > 0 ? cleanedSavedUsers : DEFAULT_USERS);
         }
-      } catch (error) {
-        console.error("크롤링 데이터 불러오기 실패:", error);
-        setUsers(cleanedSavedUsers.length > 0 ? cleanedSavedUsers : DEFAULT_USERS);
-      }
 
-      // 스케줄 데이터 불러오기
-      const s = await load("kina:schedules");
-      if (s) setSchedules(s);
+        const s = await load("kina:schedules");
+        if (s) setSchedules(s);
 
-      // 설정 데이터 불러오기 (관리자 코드, 레이드 이름)
-      try {
-        const cfg = await load("kina:config");
-        if (cfg?.adminCode) setAdminCode(cfg.adminCode);
-        if (cfg?.raidNames) {
-          setRaidNames({
-            primary: cfg.raidNames.primary || "성역",
-            secondary: cfg.raidNames.secondary || "성역2",
-          });
+        try {
+          const cfg = await load("kina:config");
+          if (cfg?.adminCode) setAdminCode(cfg.adminCode);
+          if (cfg?.raidNames) {
+            setRaidNames({
+              primary: cfg.raidNames.primary || "성역",
+              secondary: cfg.raidNames.secondary || "성역2",
+            });
+          }
+        } catch (e) {
+          console.error("설정 데이터 불러오기 실패:", e);
         }
-      } catch (e) {
-        console.error("설정 데이터 불러오기 실패:", e);
-      }
       } catch (fatalError) {
         hasError = true;
         console.error("앱 초기화 실패:", fatalError);
         setInitError("데이터를 불러오는 중 오류가 발생했습니다. 네트워크 연결을 확인하고 새로고침 해주세요.");
       } finally {
-        clearTimeout(fallbackTimer); // 타이머 해제
+        clearTimeout(fallbackTimer); 
         setIsLoading(false);
-        if (!hasError) setInitError(null); // 정상 로드 완료 시 타임아웃 에러 배너 제거
+        if (!hasError) setInitError(null); 
       }
     })();
   }, []);
@@ -189,28 +174,43 @@ useEffect(() => {
     await save("kina:schedules", s);
   }, []);
 
-
-  // ── 슬롯 마감 여부 (시간 경과 포함) ────────────────────────────────────────
   const isSlotClosed = (type, dateStr, slot) => {
     const sd = getSlotData(schedules, type, dateStr, slot);
     if (sd.members.length >= maxOf(type)) return true;
     return isSlotPast(dateStr, slot);
   };
 
-  // ── 로그인 ──────────────────────────────────────────────────────────────────
-  const handleLogin = () => {
+  // ── 로그인 로직 (비동기로 최신 데이터 체크하도록 수정) ──────────────────────────────────────────────────────────────────
+  const handleLogin = async () => {
     const v = codeInput.trim().toUpperCase();
     if (v === adminCode) {
       setUser({isAdmin:true, nick:"관리자"});
       setScreen("main"); setTab("admin"); setLoginError(""); return;
     }
+
+    // 다른 사용자가 발급한 최신 코드를 즉시 반영하기 위해 로그인 순간에 DB 재조회
+    let currentUsers = users;
+    try {
+      const freshUsers = await load("kina:users");
+      if (freshUsers) {
+        currentUsers = freshUsers;
+        setUsers(freshUsers); 
+      }
+    } catch(e) {
+      console.error("최신 유저 정보 조회 실패", e);
+    }
+
     const nowMs = Date.now();
-    const found = users.find(u => u.accessCode === v && u.codeExpiresAt && new Date(u.codeExpiresAt).getTime() > nowMs);
+    const found = currentUsers.find(u => 
+      u.accessCode?.toUpperCase() === v && 
+      u.codeExpiresAt && 
+      new Date(u.codeExpiresAt).getTime() > nowMs
+    );
+    
     if (found) { setUser(found); setScreen("main"); setTab("schedule"); setLoginError(""); }
     else setLoginError("암호가 올바르지 않습니다.");
   };
 
-  // ── 참가 신청 (즉시 입장 아님 → pending) ────────────────────────────────────
   const handleRequestJoin = (type, date, slot) => {
     if (!user || user.isAdmin) return;
     const sd = JSON.parse(JSON.stringify(schedules));
@@ -226,15 +226,12 @@ useEffect(() => {
     if (slotData.members.length >= max) { showToast("인원이 마감되었습니다.", "#ef4444"); return; }
     if (isSlotPast(date, slot)) { showToast("이미 지난 시간대입니다.", "#ef4444"); return; }
 
-    // 클래스 제한 체크
     const req = slotData.requiredClasses || [];
     if (req.length > 0 && user.job && !req.includes(user.job)) {
       showToast(`${user.job}은(는) 이 방에 참가할 수 없습니다.`, "#ef4444"); return;
     }
 
-    // 방이 없으면 (첫 번째 참가) → 방장으로 즉시 입장
     if (slotData.members.length === 0) {
-      // 다른 슬롯 체크
       let otherEntry = findMyOtherSlot(sd, type, date, slot);
       if (otherEntry) { setMoveModal({fromType:otherEntry.fromType, type, fromDate:otherEntry.d, fromSlot:otherEntry.sl, toDate:date, toSlot:slot, isPending:otherEntry.isPending}); setSlotModal(null); return; }
       slotData.members.push({nick:user.nick, job:user.job, isLeader:true, classes:[]});
@@ -242,7 +239,6 @@ useEffect(() => {
       showToast("방 생성 완료! 방장이 되었습니다 👑", "#fbbf24"); return;
     }
 
-    // 방이 있으면 → pending (다른 슬롯 체크 후)
     if (!slotData.pendingRequests) slotData.pendingRequests = [];
     let otherEntry2 = findMyOtherSlot(sd, type, date, slot);
     if (otherEntry2) { setMoveModal({fromType:otherEntry2.fromType, type, fromDate:otherEntry2.d, fromSlot:otherEntry2.sl, toDate:date, toSlot:slot, isPending:otherEntry2.isPending, joinAsPending:true}); setSlotModal(null); return; }
@@ -253,7 +249,7 @@ useEffect(() => {
 
   const findMyOtherSlot = (sd, type, date, slot) => {
     for (const [t, dates] of Object.entries(sd)) {
-      if (t !== type) continue; // 성역↔추가 독립: 같은 타입 내에서만 중복 체크
+      if (t !== type) continue; 
       for (const [d, slots] of Object.entries(dates || {})) {
         for (const [sl, sdata] of Object.entries(slots)) {
           if (d === date && sl === slot) continue;
@@ -265,7 +261,6 @@ useEffect(() => {
     return null;
   };
 
-  // ── 방장 수락 ───────────────────────────────────────────────────────────────
   const handleApprove = (type, date, slot, nick) => {
     const sd = JSON.parse(JSON.stringify(schedules));
     const slotData = sd[type]?.[date]?.[slot];
@@ -280,7 +275,6 @@ useEffect(() => {
     showToast(`${nick} 입장 승인!`, "#22c55e");
   };
 
-  // ── 방장 거절 ───────────────────────────────────────────────────────────────
   const handleReject = (type, date, slot, nick) => {
     const sd = JSON.parse(JSON.stringify(schedules));
     const slotData = sd[type]?.[date]?.[slot];
@@ -290,7 +284,6 @@ useEffect(() => {
     showToast(`${nick} 신청 거절`, "#f97316");
   };
 
-  // ── 참석 취소 ───────────────────────────────────────────────────────────────
   const handleLeave = (type, date, slot) => {
     if (!user || user.isAdmin) return;
     const sd = JSON.parse(JSON.stringify(schedules));
@@ -298,7 +291,6 @@ useEffect(() => {
     if (!slotData) return;
     const idx = slotData.members.findIndex(m => m.nick === user.nick);
     if (idx === -1) {
-      // pending 취소
       slotData.pendingRequests = slotData.pendingRequests?.filter(m => m.nick !== user.nick) || [];
       setSchedules({...sd}); persist(users, sd); setSlotModal(null);
       showToast("신청을 취소했습니다.", "#f97316"); return;
@@ -308,24 +300,21 @@ useEffect(() => {
     if (wasLeader && upd.length > 0) upd[0].isLeader = true;
     slotData.members = upd;
     if (upd.length === 0) {
-      // 방이 완전히 비면 공지·직업제한·파티배치 전체 초기화
       slotData.notice = "";
       slotData.requiredClasses = [];
       slotData.namedGroups = {group1:[], group2:[]};
     } else if (wasLeader) {
-      slotData.notice = ""; // 방장이 나가면 공지만 초기화
+      slotData.notice = ""; 
     }
     setSchedules({...sd}); persist(users, sd); setSlotModal(null);
     showToast("참석 취소되었습니다.", "#f97316");
   };
 
-  // ── 이동 확인 ───────────────────────────────────────────────────────────────
   const confirmMove = () => {
     if (!moveModal) return;
     const {fromType, type, fromDate, fromSlot, toDate, toSlot, isPending, joinAsPending} = moveModal;
     const effectiveFromType = fromType || type;
     const sd = JSON.parse(JSON.stringify(schedules));
-    // 기존 슬롯에서 제거
     const fromData = sd[effectiveFromType]?.[fromDate]?.[fromSlot];
     if (fromData) {
       if (isPending) {
@@ -336,7 +325,6 @@ useEffect(() => {
           const wasLeader = fromData.members[fi].isLeader;
           const upd = fromData.members.filter(m => m.nick !== user.nick);
           if (wasLeader && upd.length > 0) upd[0].isLeader = true;
-          // 방장이 이동하면 기존 방 공지 초기화
           if (wasLeader) fromData.notice = "";
           fromData.members = upd;
         }
@@ -360,7 +348,6 @@ useEffect(() => {
     }
   };
 
-  // ── 퇴출 ───────────────────────────────────────────────────────────────────
   const handleKick = (type, date, slot, nick) => {
     const sd = JSON.parse(JSON.stringify(schedules));
     const slotData = sd[type]?.[date]?.[slot];
@@ -371,19 +358,16 @@ useEffect(() => {
       if (slotData.members[idx].isLeader && upd.length > 0) upd[0].isLeader = true;
       slotData.members = upd;
       if (upd.length === 0) {
-        // 방이 완전히 비면 공지·직업제한·파티배치 전체 초기화
         slotData.notice = "";
         slotData.requiredClasses = [];
         slotData.namedGroups = {group1:[], group2:[]};
       }
     }
-    // pending도 제거
     slotData.pendingRequests = slotData.pendingRequests?.filter(m => m.nick !== nick) || [];
     setSchedules({...sd}); persist(users, sd); setKickConfirm(null);
     showToast(`${nick} 퇴출 완료`, "#ef4444");
   };
 
-  // ── 관리자: 전체 강퇴 ───────────────────────────────────────────────────────
   const handleAdminClearSlot = (type, date, slot) => {
     const sd = JSON.parse(JSON.stringify(schedules));
     if (sd[type]?.[date]?.[slot]) {
@@ -394,11 +378,11 @@ useEffect(() => {
     showToast("전체 강퇴 완료", "#ef4444");
   };
 
-  // ── 관리자: 유저 코드 생성/삭제 (6일 유효) ─────────────────────────────────────
+  // ── 관리자: 대소문자 고정으로 코드 발급 ─────────────────────────────────────
   const handleGenerateAccessCode = (nick) => {
     const now = new Date();
     const expires = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
-    const newCode = genCode();
+    const newCode = genCode().toUpperCase(); // 확실한 매칭을 위해 대문자 고정
     const nextUsers = users.map(u => u.nick === nick ? {
       ...u,
       accessCode: newCode,
@@ -420,7 +404,6 @@ useEffect(() => {
     showToast("코드가 삭제되었습니다.", "#f97316");
   };
 
-  // ── 관리자: 설정 저장 (레이드 이름 + 관리자 코드) ──────────────────────────────
   const handleSaveAdminSettings = async () => {
     const nextConfig = {
       adminCode,
@@ -435,7 +418,6 @@ useEffect(() => {
     }
   };
 
-  // ── 관리자: 유저 직접 추가 ──────────────────────────────────────────────────
   const handleAdminAdd = (type, date, slot, nick) => {
     const targetUser = users.find(u => u.nick === nick);
     if (!targetUser) { showToast("유저를 찾을 수 없습니다.", "#ef4444"); return; }
@@ -452,13 +434,11 @@ useEffect(() => {
     showToast(`${nick} 추가 완료!`, "#22c55e"); setAdminSearchQuery(""); setAdminAddTarget(null);
   };
 
-  // ── 추가모집 파티 생성 draft 시작 ─────────────────────────────────────────────
   const handleCreateExtraParty = () => {
     if (!user || user.isAdmin) return;
     setExtraDraft({requiredClasses:[], notice:""});
   };
 
-  // ── 추가모집 파티 생성 확정 ────────────────────────────────────────────────────
   const confirmCreateExtraParty = () => {
     if (!user || user.isAdmin || !extraDraft) return;
     const type = "추가";
@@ -502,7 +482,6 @@ useEffect(() => {
     setSchedules({...sd}); persist(users, sd);
   };
 
-  // ── 공지 저장 ────────────────────────────────────────────────────────────────
   const saveNotice = (type, date, slot) => {
     const sd = JSON.parse(JSON.stringify(schedules));
     if (!sd[type]) sd[type] = {};
@@ -522,7 +501,6 @@ useEffect(() => {
   const amIPending = (type, date, slot) =>
     !!(user && !user.isAdmin && getSlotData(schedules, type, date, slot).pendingRequests?.find(m => m.nick === user.nick));
 
-  // ── TXT 다운로드 (관리자용) ──────────────────────────────────────────────────
   const downloadUsersTxt = () => {
     const lines = users
       .filter(u => u.accessCode)
@@ -536,10 +514,9 @@ useEffect(() => {
     showToast("TXT 다운로드 완료!", "#22c55e");
   };
 
-  // ── 추가모집 파티 카드 뷰 (고정 4파티) ────────────────────────────────────
   const renderExtraParties = () => {
     const type = "추가";
-    const max = maxOf(type); // 16
+    const max = maxOf(type); 
     const date = TODAY_STR;
     const PARTY_SLOTS = ["party-1","party-2","party-3","party-4"];
     return (
@@ -548,7 +525,8 @@ useEffect(() => {
           <h2 style={{fontSize:17,fontWeight:700,color:"#c4b5fd",marginBottom:4}}>➕ 성역 외 추가모집</h2>
           <p style={{fontSize:12,color:"#444"}}>최대 {max}명 · 4개 파티 고정 운영 (클릭하여 참가)</p>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
+        {/* 모바일 반응형 클래스 적용 */}
+        <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
           {PARTY_SLOTS.map((slot, idx) => {
             const sd = getSlotData(schedules, type, date, slot);
             const members = sd.members || [];
@@ -619,12 +597,10 @@ useEffect(() => {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
   const renderGrid = (type) => {
     const max = maxOf(type);
     return (
       <div>
-        {/* 날짜 탭 */}
         <div style={{display:"flex", gap:6, marginBottom:20, overflowX:"auto", paddingBottom:6}}>
           {DATE_RANGE.map(d => {
             const ds = fmtDate(d);
@@ -654,7 +630,6 @@ useEffect(() => {
           })}
         </div>
 
-        {/* 슬롯 그리드 */}
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(115px,1fr))", gap:8}}>
           {SLOTS.map(slot => {
             const sd = getSlotData(schedules, type, selectedDate, slot);
@@ -689,7 +664,7 @@ useEffect(() => {
                 {hasPending && <span style={{position:"absolute",top:5,left:8,fontSize:9,color:"#fbbf24"}}>!</span>}
                 <div style={{fontSize:14, fontWeight:700, color:timeColor, marginBottom:4, letterSpacing:.5}}>{slot}</div>
                 <div style={{fontSize:11, color:"#444", marginBottom:3}}>{members.length}/{max}명</div>
-                <div style={{fontSize:10, fontWeight:700, color: past?"#2a2a2a":isFull?"#ef4444":members.length>0?"#22c55e":"#2a2a3a"}}>
+                <div style={{fontSize:10, fontWeight:700, color: past?"#2a2a3a":isFull?"#ef4444":members.length>0?"#22c55e":"#2a2a3a"}}>
                   {past ? "⏱ 종료" : members.length===0 ? "─" : isFull ? "🔴 마감" : "🟢 모집중"}
                 </div>
                 {isMine && !past && <div style={{fontSize:9,color:"#a78bfa",marginTop:3,fontWeight:600}}>✓ 참석예정</div>}
@@ -702,9 +677,6 @@ useEffect(() => {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 슬롯 모달
-  // ─────────────────────────────────────────────────────────────────────────────
   const renderSlotModal = () => {
     if (!slotModal) return null;
     const {type, date, slot} = slotModal;
@@ -723,17 +695,16 @@ useEffect(() => {
     const isPartySlot = slot?.startsWith("party-");
     const slotLabel = isPartySlot ? `파티 #${slot.replace("party-","")}` : slot;
 
-    // 내 직업이 클래스 제한에 맞는지
     const myJobAllowed = !user?.isAdmin && required.length > 0
       ? (user?.job ? required.includes(user.job) : true)
       : true;
 
     return (
-              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}
         onClick={e => { if(e.target===e.currentTarget){setSlotModal(null);setEditingNotice(false);setClassEditing(false);} }}>
-        <div style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto"}}>
+        {/* 모바일 반응형 클래스 적용 */}
+        <div className="mobile-modal" style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto"}}>
 
-          {/* 헤더 */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
             <div>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -752,7 +723,6 @@ useEffect(() => {
               style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>✕</button>
           </div>
 
-          {/* 공지 */}
           <div style={{background:"#0a0a14",borderRadius:12,padding:14,marginBottom:14,border:"1px solid #1e1e30"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
               <span style={{fontSize:12,color:"#fbbf24",fontWeight:700}}>📌 방 공지</span>
@@ -775,7 +745,6 @@ useEffect(() => {
             )}
           </div>
 
-          {/* 진행 바 */}
           <div style={{display:"flex",gap:4,marginBottom:6}}>
             {Array.from({length:max}).map((_,i) => (
               <div key={i} style={{flex:1,height:5,borderRadius:3,background:i<members.length?(isFull?"#ef4444":"#6d4aff"):"#1e1e30",transition:"background .3s"}}/>
@@ -783,9 +752,7 @@ useEffect(() => {
           </div>
           <div style={{fontSize:11,color:"#444",marginBottom:16,textAlign:"right"}}>남은 자리 <span style={{color:isFull?"#ef4444":"#a78bfa",fontWeight:700}}>{max-members.length}자리</span></div>
 
-          {/* ─── 방장 + 7자리 카드 레이아웃 ─── */}
           <div style={{marginBottom:16}}>
-            {/* 방장 행 */}
             {(() => {
               const leader = members.find(m => m.isLeader);
               return (
@@ -813,7 +780,6 @@ useEffect(() => {
               );
             })()}
 
-            {/* 파티원 카드 그리드: 성역=7자리(직업지정가능) / 추가모집=15자리(자유) */}
             {(() => {
               const partyCount = isPartySlot ? max - 1 : 7;
               const colMin = isPartySlot ? 90 : 130;
@@ -836,7 +802,6 @@ useEffect(() => {
                         }}>
                           <span style={{position:"absolute",top:5,left:8,fontSize:9,color:"#333",fontWeight:700}}>#{idx+1}</span>
 
-                          {/* 방장 클래스 지정 버튼 (성역만) */}
                           {!isPartySlot && isLeader && !m && (
                             <div style={{position:"absolute",top:4,right:4}}>
                               <select
@@ -898,7 +863,6 @@ useEffect(() => {
               );
             })()}
 
-            {/* 대기 신청자 (방장에게만) */}
             {isLeader && pending.length > 0 && (
               <div style={{background:"rgba(251,191,36,.06)",border:"1px solid rgba(251,191,36,.25)",borderRadius:12,padding:14,marginTop:12}}>
                 <p style={{fontSize:12,color:"#fbbf24",fontWeight:700,marginBottom:10}}>⏳ 참가 신청 대기 ({pending.length}명)</p>
@@ -918,7 +882,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* 방장 인원 추가 검색 (성역/추가 공통) */}
             {isLeader && !past && (
               <div style={{background:"#0a0a14",border:"1px solid #1e1e30",borderRadius:12,padding:12,marginTop:14}}>
                 <p style={{fontSize:11,color:"#a78bfa",fontWeight:700,marginBottom:6}}>🔍 인원 검색 후 추가</p>
@@ -999,9 +962,9 @@ useEffect(() => {
             )}
           </div>
 
-          {/* 액션 버튼 */}
+          {/* 모바일 반응형 클래스 적용 */}
           {!user?.isAdmin && !past && (
-            <div style={{display:"flex",gap:8}}>
+            <div className="mobile-col" style={{display:"flex",gap:8}}>
               {!isMine && !isPending && !isFull && (
                 myJobAllowed ? (
                   <button onClick={()=>handleRequestJoin(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
@@ -1041,9 +1004,6 @@ useEffect(() => {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 관리자 탭
-  // ─────────────────────────────────────────────────────────────────────────────
   const renderAdmin = () => {
     const filteredUsers = adminSearchQuery
       ? users.filter(u => u.nick.includes(adminSearchQuery) || u.job?.includes(adminSearchQuery))
@@ -1061,7 +1021,6 @@ useEffect(() => {
 
         {adminView==="users" && (
           <div>
-            {/* 관리자 설정 (레이드 이름 / 관리자 코드) */}
             <div style={{background:"#111120",border:"1px solid #1e1e30",borderRadius:14,padding:14,marginBottom:16,display:"flex",flexWrap:"wrap",gap:12,alignItems:"flex-end"}}>
               <div style={{flex:1,minWidth:180}}>
                 <label style={{display:"block",fontSize:11,color:"#555",marginBottom:4}}>레이드 이름 1</label>
@@ -1087,15 +1046,16 @@ useEffect(() => {
                   style={{width:"100%",padding:"8px 10px",background:"#0a0a14",border:"1px solid #1e1e30",borderRadius:8,color:"#e2d9f3",fontFamily:"inherit",fontSize:12,letterSpacing:4}}
                 />
               </div>
+              {/* 모바일 반응형 클래스 적용 */}
               <button
                 onClick={handleSaveAdminSettings}
+                className="mobile-btn"
                 style={{padding:"9px 16px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}
               >
                 설정 저장
               </button>
             </div>
 
-            {/* 검색 + TXT 다운로드 */}
             <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
               <div style={{position:"relative",flex:1}}>
                 <input value={adminSearchQuery} onChange={e=>setAdminSearchQuery(e.target.value)} placeholder="닉네임 또는 직업으로 검색..."
@@ -1177,7 +1137,6 @@ useEffect(() => {
 
         {adminView==="schedule" && (
           <div>
-            {/* 관리자 유저 추가 패널 */}
             {adminAddTarget && (
               <div style={{background:"rgba(109,74,255,.08)",border:"1px solid #6d4aff",borderRadius:14,padding:16,marginBottom:16}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -1273,9 +1232,6 @@ useEffect(() => {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 외부 공유용 읽기 전용 뷰
-  // ─────────────────────────────────────────────────────────────────────────────
   const renderShareView = () => {
     const raidTypes = ["성역","성역2","추가"];
 
@@ -1336,7 +1292,7 @@ useEffect(() => {
                   const rawEntries = Object.entries(schedules[type]?.[ds] || {})
                     .filter(([, sd]) => sd.members?.length > 0);
                   const dayData = isExtra
-                    ? rawEntries.sort() // party-1,2,3,4...
+                    ? rawEntries.sort() 
                     : rawEntries.sort(([aSlot],[bSlot]) => aSlot.localeCompare(bSlot));
                   if (dayData.length === 0) return null;
 
@@ -1408,7 +1364,8 @@ useEffect(() => {
                                 </div>
                               </div>
 
-                              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4}}>
+                              {/* 모바일 반응형 클래스 적용 */}
+                              <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4}}>
                                 {[
                                   {label:"1파티", group:group1, avg:avg1},
                                   {label:"2파티", group:group2, avg:avg2},
@@ -1448,9 +1405,6 @@ useEffect(() => {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 성역 방 구성 모달 (드래그앤드롭)
-  // ─────────────────────────────────────────────────────────────────────────────
   const renderNamedGroupModal = () => {
     if (!namedGroupModal) return null;
     const {type, date, slot} = namedGroupModal;
@@ -1474,7 +1428,6 @@ useEffect(() => {
       ? [...namedGroups.party1, ...namedGroups.party2, ...namedGroups.party3, ...namedGroups.party4]
       : [...namedGroups.group1, ...namedGroups.group2];
     const unassigned = allNicks.filter(n => !assigned.includes(n));
-    // 방장 여부 (방장만 DnD 가능)
     const isLeaderHere = !!members.find(m => m.nick === user?.nick && m.isLeader);
 
     const saveGroups = (newGroups) => {
@@ -1495,7 +1448,7 @@ useEffect(() => {
     };
 
     const handleDrop = (e, targetGroup) => {
-      if (!isLeaderHere) return; // 방장만 이동 가능
+      if (!isLeaderHere) return; 
       e.preventDefault();
       const nick = e.dataTransfer.getData("nick");
       if (!nick) return;
@@ -1555,7 +1508,8 @@ useEffect(() => {
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:16}}
         onClick={e=>{if(e.target===e.currentTarget)setNamedGroupModal(null);}}>
-        <div style={{background:"#111120",border:"1px solid #22c55e55",borderRadius:20,padding:24,maxWidth:620,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
+        {/* 모바일 반응형 클래스 적용 */}
+        <div className="mobile-modal" style={{background:"#111120",border:"1px solid #22c55e55",borderRadius:20,padding:24,maxWidth:620,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <h3 style={{fontSize:16,fontWeight:700,color:"#22c55e"}}>
               {isExtra ? "🏠 방 구성 — 1파티 / 4파티" : "🏠 방 구성 — 1네임드 / 2네임드"}
@@ -1590,7 +1544,8 @@ useEffect(() => {
               {unassigned.map(nick => renderCard(nick))}
             </div>
           )}
-          <div style={{display:"flex",gap:8,marginTop:16}}>
+          {/* 모바일 반응형 클래스 적용 */}
+          <div className="mobile-col" style={{display:"flex",gap:8,marginTop:16}}>
             <button onClick={()=>setNamedGroupModal(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>닫기</button>
             <button onClick={()=>{setNamedGroupModal(null);setSlotModal({type,date,slot});setEditingNotice(false);setClassEditing(false);setNoticeEdit(sd.notice||"");}} style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#15803d,#22c55e)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>✅ 저장 완료 — 파티모집으로 돌아가기</button>
           </div>
@@ -1599,9 +1554,6 @@ useEffect(() => {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 최종 렌더
-  // ─────────────────────────────────────────────────────────────────────────────
   // ── 로딩 화면 ────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -1629,17 +1581,22 @@ useEffect(() => {
         ::-webkit-scrollbar-track { background:#0a0a14; }
         ::-webkit-scrollbar-thumb { background:#4a3aaa; border-radius:2px; }
         textarea, input { outline:none; }
+
+        /* 모바일 반응형용 CSS 추가 */
+        @media (max-width: 600px) {
+          .mobile-col { flex-direction: column !important; }
+          .mobile-grid-1 { grid-template-columns: 1fr !important; }
+          .mobile-modal { padding: 18px !important; }
+          .mobile-btn { width: 100% !important; justify-content: center !important; }
+        }
       `}</style>
 
-      {/* 토스트 */}
       {toast && (
         <div style={{position:"fixed",top:20,right:20,background:toast.color,color:"#fff",padding:"12px 20px",borderRadius:12,fontWeight:700,fontSize:13,zIndex:999,boxShadow:"0 4px 24px rgba(0,0,0,.5)"}}>
           {toast.msg}
         </div>
       )}
 
-      {/* ── 로그인 ── */}
-      {/* 초기화 에러 표시 */}
       {initError && (
         <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,background:"rgba(239,68,68,.95)",color:"#fff",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,backdropFilter:"blur(10px)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1662,7 +1619,6 @@ useEffect(() => {
         />
       )}
 
-      {/* ── 메인 ── */}
       {screen === "main" && (
         <MainLayout
           user={user}
@@ -1684,17 +1640,16 @@ useEffect(() => {
         </MainLayout>
       )}
 
-      {/* 추가모집 파티 생성 draft 모달 */}
       {extraDraft && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setExtraDraft(null);}}>
-          <div style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:26,maxWidth:480,width:"100%"}}>
+          {/* 모바일 반응형 클래스 적용 */}
+          <div className="mobile-modal" style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:26,maxWidth:480,width:"100%"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <h3 style={{fontSize:16,fontWeight:700,color:"#c4b5fd"}}>🏠 파티 생성</h3>
               <button onClick={()=>setExtraDraft(null)} style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"5px 11px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
             </div>
 
-            {/* 클래스 지정 */}
             <div style={{marginBottom:18}}>
               <p style={{fontSize:12,color:"#a78bfa",fontWeight:700,marginBottom:6}}>🎭 모집 클래스 지정 (선택사항)</p>
               <p style={{fontSize:11,color:"#444",marginBottom:10}}>각 자리에 원하는 클래스를 지정하세요. 지정하지 않은 자리는 모든 클래스 신청 가능합니다.</p>
@@ -1721,7 +1676,6 @@ useEffect(() => {
                 })}
               </div>
 
-              {/* 현재 지정된 자리 미리보기 */}
               {(extraDraft.requiredClasses||[]).length > 0 && (
                 <div style={{background:"#0a0a14",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -1743,7 +1697,6 @@ useEffect(() => {
               )}
             </div>
 
-            {/* 공지 */}
             <div style={{marginBottom:18}}>
               <p style={{fontSize:12,color:"#fbbf24",fontWeight:700,marginBottom:6}}>📌 방 공지 (선택사항)</p>
               <textarea
@@ -1757,7 +1710,8 @@ useEffect(() => {
               />
             </div>
 
-            <div style={{display:"flex",gap:8}}>
+            {/* 모바일 반응형 클래스 적용 */}
+            <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setExtraDraft(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
               <button onClick={confirmCreateExtraParty} style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
                 🏠 방 생성하기
@@ -1767,23 +1721,22 @@ useEffect(() => {
         </div>
       )}
 
-      {/* 슬롯 모달 */}
       {renderSlotModal()}
 
-      {/* 방 구성 모달 (성역 나이미드 배치) */}
       {renderNamedGroupModal()}
 
-      {/* 이동 확인 모달 */}
       {moveModal && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}>
-          <div style={{background:"#111120",border:"1px solid rgba(251,191,36,.3)",borderRadius:20,padding:30,maxWidth:360,width:"100%",textAlign:"center"}}>
+          {/* 모바일 반응형 클래스 적용 */}
+          <div className="mobile-modal" style={{background:"#111120",border:"1px solid rgba(251,191,36,.3)",borderRadius:20,padding:30,maxWidth:360,width:"100%",textAlign:"center"}}>
             <div style={{fontSize:44,marginBottom:16}}>⚠️</div>
             <h3 style={{color:"#fbbf24",fontSize:18,fontWeight:700,marginBottom:12}}>시간대 변경</h3>
             <p style={{color:"#888",fontSize:14,lineHeight:1.7,marginBottom:24}}>
               이미 <strong style={{color:"#c4b5fd"}}>{moveModal.fromType&&moveModal.fromType!==moveModal.type?`[${moveModal.fromType}] `:""}{moveModal.fromDate!==selectedDate?moveModal.fromDate+" ":""}{moveModal.fromSlot}</strong>에<br/>등록되어 있습니다.<br/>
               <strong style={{color:"#a78bfa"}}>{moveModal.toDate!==selectedDate?moveModal.toDate+" ":""}{moveModal.toSlot}</strong>으로 이동할까요?
             </p>
-            <div style={{display:"flex",gap:8}}>
+            {/* 모바일 반응형 클래스 적용 */}
+            <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setMoveModal(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
               <button onClick={confirmMove} style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>이동하기</button>
             </div>
@@ -1791,14 +1744,15 @@ useEffect(() => {
         </div>
       )}
 
-      {/* 퇴출 확인 모달 */}
       {kickConfirm && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16}}>
-          <div style={{background:"#111120",border:"1px solid rgba(239,68,68,.3)",borderRadius:20,padding:28,maxWidth:330,width:"100%",textAlign:"center"}}>
+          {/* 모바일 반응형 클래스 적용 */}
+          <div className="mobile-modal" style={{background:"#111120",border:"1px solid rgba(239,68,68,.3)",borderRadius:20,padding:28,maxWidth:330,width:"100%",textAlign:"center"}}>
             <div style={{fontSize:38,marginBottom:14}}>🚫</div>
             <h3 style={{color:"#ef4444",fontSize:17,fontWeight:700,marginBottom:10}}>참석자 퇴출</h3>
             <p style={{color:"#888",fontSize:13,lineHeight:1.6,marginBottom:22}}><strong style={{color:"#fca5a5",fontSize:15}}>{kickConfirm.nick}</strong>님을<br/>이 시간대에서 퇴출하시겠습니까?</p>
-            <div style={{display:"flex",gap:8}}>
+            {/* 모바일 반응형 클래스 적용 */}
+            <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setKickConfirm(null)} style={{flex:1,padding:"11px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
               <button onClick={()=>handleKick(kickConfirm.type,kickConfirm.date,kickConfirm.slot,kickConfirm.nick)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:"rgba(127,29,29,.8)",color:"#fca5a5",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>퇴출하기</button>
             </div>
