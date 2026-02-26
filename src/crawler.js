@@ -1,14 +1,32 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
-//const fs = require('fs'); 
+
+// 투명 망토(스텔스) 장착!
+puppeteer.use(StealthPlugin());
 
 (async () => {
-  // 1. GitHub Actions(리눅스 서버)에서 크래시 나지 않도록 샌드박스 비활성화 옵션 추가
-  const browser = await puppeteer.launch({ 
-    headless: "new",
-    args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+  // 💡 여기에 ScraperAPI 홈페이지에서 가입하고 받은 API 키를 넣으세요!
+  const SCRAPER_API_KEY = '여기에_복사한_API_KEY_붙여넣기'; 
+
+  // 1. GitHub Actions(리눅스 서버)에서 크래시 나지 않도록 샌드박스 비활성화 + 프록시 장착
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      '--proxy-server=http://proxy-server.scraperapi.com:8001' // 👈 ScraperAPI 세탁기 주소 추가!
+    ]
   });
+
   const page = await browser.newPage();
+
+  // 💡 2. 페이지 이동 전에 세탁기(프록시) 인증 비밀번호를 입력해 줍니다.
+  await page.authenticate({
+    username: 'scraperapi',
+    password: SCRAPER_API_KEY
+  });
   
   await page.setViewport({ width: 1280, height: 1080 });
 
@@ -16,6 +34,8 @@ import fs from 'fs';
   console.log('페이지 접속 중...');
   
   await page.goto(url, { waitUntil: 'networkidle2' });
+
+  // ... (이 아래 try ~ catch 부터 끝까지는 석준님 원래 코드 그대로 두시면 됩니다!) ...
 
   try {
     await page.waitForSelector('a.nickname-link', { timeout: 5000 });
