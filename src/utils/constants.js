@@ -20,4 +20,4 @@ export const SLOTS = Array.from({length:48},(_,i)=>{
 
 export const WEEK_DAYS = ["일","월","화","수","목","금","토"];
 
-export const maxOf = (type) => type === "성역" ? 8 : 16;
+export const maxOf = (type) => (type === "성역" || type === "성역2") ? 8 : 16;
