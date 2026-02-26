@@ -1,5 +1,6 @@
-const puppeteer = require('puppeteer');
-const fs = require('fs'); 
+import puppeteer from 'puppeteer';
+import fs from 'fs';
+//const fs = require('fs'); 
 
 (async () => {
   // 1. GitHub Actions(리눅스 서버)에서 크래시 나지 않도록 샌드박스 비활성화 옵션 추가
