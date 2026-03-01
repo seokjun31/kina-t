@@ -691,7 +691,7 @@ export default function App() {
     const dObj = DATE_RANGE.find(d => fmtDate(d) === date);
     const {short, wd} = dObj ? fmtLabel(dObj) : {short:date, wd:""};
     const isPartySlot = slot?.startsWith("party-");
-    const slotLabel = isPartySlot ? `파티 #${slot.replace("party-","")}` : slot;
+    const slotLabel = isPartySlot ? `${slot.replace("party-","")}포스` : slot;
 
     const myJobAllowed = !user?.isAdmin && required.length > 0
       ? (user?.job ? required.includes(user.job) : true)
@@ -1311,20 +1311,32 @@ export default function App() {
                     <div key={type} className="share-type-card" style={{borderRadius:20,background:"#020617",border:"1px solid #111827",padding:18}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                         <div style={{fontSize:15,fontWeight:800,color:"#a5b4fc"}}>⚔️ {title}</div>
-                        <div style={{fontSize:12,color:"#6b7280"}}>{dayData.length}개 시간대</div>
+                        <div style={{fontSize:12,color:"#6b7280"}}>{dayData.length}개 {isExtra ? "파티" : "시간대"}</div>
                       </div>
 
                       <div style={{display:"grid",gap:12}}>
                         {dayData.map(([slot, sd]) => {
                           const members = sd.members || [];
                           const leader = members.find(m => m.isLeader);
+                          // party-N → N포스 변환
+                          const dispSlot = slot.startsWith("party-")
+                            ? `${slot.replace("party-","")}포스`
+                            : slot;
                           const rawGroups = sd.namedGroups || {};
-                          const group1Nicks = rawGroups.group1 || [];
-                          const group2Nicks = rawGroups.group2 || [];
+                          // 추가모집: party1~4 키, 성역류: group1~2 키
+                          const displayGroups = isExtra
+                            ? [
+                                { label:"1파티", nicks: rawGroups.party1 || [] },
+                                { label:"2파티", nicks: rawGroups.party2 || [] },
+                                { label:"3파티", nicks: rawGroups.party3 || [] },
+                                { label:"4파티", nicks: rawGroups.party4 || [] },
+                              ]
+                            : [
+                                { label:"1파티", nicks: rawGroups.group1 || [] },
+                                { label:"2파티", nicks: rawGroups.group2 || [] },
+                              ];
                           const byNick = Object.fromEntries(members.map(m => [m.nick, m]));
-                          const group1 = group1Nicks.map(n => byNick[n]).filter(Boolean);
-                          const group2 = group2Nicks.map(n => byNick[n]).filter(Boolean);
-                          const grouped = new Set([...group1Nicks, ...group2Nicks]);
+                          const grouped = new Set(displayGroups.flatMap(g => g.nicks));
                           const unassigned = members.filter(m => !grouped.has(m.nick));
                           const isPast = !isExtra && !slot.startsWith("party-") ? isSlotPast(ds, slot) : false;
 
@@ -1342,9 +1354,6 @@ export default function App() {
                             );
                           };
 
-                          const avg1 = calcAvgAtul(group1);
-                          const avg2 = calcAvgAtul(group2);
-
                           return (
                             <div key={slot} className="share-slot-card" style={{
                               borderRadius:18,
@@ -1355,8 +1364,8 @@ export default function App() {
                             }}>
                               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:sd.notice?6:10}}>
                                 <div>
-                                  <div style={{fontSize:12,color:"#64748b"}}>시작 시간</div>
-                                  <div className="share-slot-time" style={{fontSize:18,fontWeight:800,color:"#e5e7eb"}}>{slot}</div>
+                                  <div style={{fontSize:12,color:"#64748b"}}>{isExtra ? "파티명" : "시작 시간"}</div>
+                                  <div className="share-slot-time" style={{fontSize:18,fontWeight:800,color:"#e5e7eb"}}>{dispSlot}</div>
                                 </div>
                                 <div style={{textAlign:"right"}}>
                                   <div style={{fontSize:12,color:"#64748b"}}>인원</div>
@@ -1373,22 +1382,23 @@ export default function App() {
                               )}
 
                               <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4}}>
-                                {[
-                                  {label:"1파티", group:group1, avg:avg1},
-                                  {label:"2파티", group:group2, avg:avg2},
-                                ].map(party => (
-                                  <div key={party.label} className="share-party-card" style={{borderRadius:14,background:"#020617",border:"1px solid #111827",padding:10}}>
-                                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4,marginBottom:6}}>
-                                      <div style={{fontSize:12,color:"#e5e7eb",fontWeight:700}}>{party.label}</div>
-                                      <div style={{fontSize:11,color:party.avg?"#38bdf8":"#4b5563"}}>
-                                        {party.avg ? `아툴 평균 ${party.avg}` : "아툴 정보 없음"}
+                                {displayGroups.map(party => {
+                                  const group = party.nicks.map(n => byNick[n]).filter(Boolean);
+                                  const avg = calcAvgAtul(group);
+                                  return (
+                                    <div key={party.label} className="share-party-card" style={{borderRadius:14,background:"#020617",border:"1px solid #111827",padding:10}}>
+                                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4,marginBottom:6}}>
+                                        <div style={{fontSize:12,color:"#e5e7eb",fontWeight:700}}>{party.label}</div>
+                                        <div style={{fontSize:11,color:avg?"#38bdf8":"#4b5563"}}>
+                                          {avg ? `아툴 평균 ${avg}` : "아툴 정보 없음"}
+                                        </div>
                                       </div>
+                                      {group.length > 0 ? group.map(renderPerson) : (
+                                        <div style={{fontSize:11,color:"#374151"}}>배정 없음</div>
+                                      )}
                                     </div>
-                                    {party.group.length > 0 ? party.group.map(renderPerson) : (
-                                      <div style={{fontSize:11,color:"#374151"}}>배정 없음</div>
-                                    )}
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
 
                               {unassigned.length > 0 && (
