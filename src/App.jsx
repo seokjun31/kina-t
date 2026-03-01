@@ -1193,9 +1193,11 @@ export default function App() {
                               </span>
                               {(sd.pendingRequests?.length||0)>0&&<span style={{background:"rgba(251,191,36,.15)",color:"#fbbf24",fontSize:10,padding:"1px 8px",borderRadius:20}}>대기 {sd.pendingRequests.length}명</span>}
                             </div>
-                            <div style={{display:"flex",gap:6}}>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                               <button onClick={()=>{setAdminAddTarget({type,date:ds,slot});setAdminSearchQuery("");setAdminView("schedule");}}
                                 style={{background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>+ 추가</button>
+                              <button onClick={()=>setNamedGroupModal({type,date:ds,slot})}
+                                style={{background:"rgba(34,197,94,.12)",border:"1px solid rgba(34,197,94,.4)",color:"#4ade80",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>🏠 파티분배</button>
                               <button onClick={()=>{ if(window.confirm(`${slot} 전체 강퇴?`)) handleAdminClearSlot(type,ds,slot); }}
                                 style={{background:"rgba(127,29,29,.3)",border:"1px solid #7f1d1d",color:"#fca5a5",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11}}>전체강퇴</button>
                             </div>
@@ -1205,7 +1207,13 @@ export default function App() {
                             {sd.members.map(m=>{
                               const uInfo = users.find(u => u.nick === m.nick);
                               return (
-                                <div key={m.nick} style={{background:"#13131f",border:`1px solid ${m.isLeader?"rgba(251,191,36,.4)":"#2a2a3a"}`,borderRadius:10,padding:"4px 10px",fontSize:12,display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                                <div key={m.nick} style={{position:"relative",background:"#13131f",border:`1px solid ${m.isLeader?"rgba(251,191,36,.4)":"#2a2a3a"}`,borderRadius:10,padding:"6px 10px 4px",fontSize:12,display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                                  {/* 개별 강퇴 버튼 */}
+                                  <button
+                                    onClick={()=>setKickConfirm({type,date:ds,slot,nick:m.nick})}
+                                    title={`${m.nick} 강퇴`}
+                                    style={{position:"absolute",top:-6,right:-6,width:16,height:16,borderRadius:"50%",background:"#7f1d1d",border:"1px solid #ef4444",color:"#fca5a5",cursor:"pointer",fontFamily:"inherit",fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1,zIndex:1}}
+                                  >✕</button>
                                   <div style={{display:"flex",alignItems:"center",gap:4}}>
                                     {m.isLeader&&<span style={{color:"#fbbf24"}}>👑</span>}
                                     <span style={{color:m.isLeader?"#fbbf24":"#c4b5fd",fontWeight:m.isLeader?700:500}}>{m.nick}</span>
@@ -1345,7 +1353,7 @@ export default function App() {
                               padding:14,
                               opacity:isPast?0.45:1
                             }}>
-                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:sd.notice?6:10}}>
                                 <div>
                                   <div style={{fontSize:12,color:"#64748b"}}>시작 시간</div>
                                   <div className="share-slot-time" style={{fontSize:18,fontWeight:800,color:"#e5e7eb"}}>{slot}</div>
@@ -1357,6 +1365,12 @@ export default function App() {
                                   </div>
                                 </div>
                               </div>
+                              {sd.notice && (
+                                <div style={{display:"flex",alignItems:"flex-start",gap:6,background:"rgba(251,191,36,.06)",border:"1px solid rgba(251,191,36,.25)",borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:12,color:"#fde68a",lineHeight:1.5}}>
+                                  <span style={{flexShrink:0}}>📌</span>
+                                  <span>{sd.notice}</span>
+                                </div>
+                              )}
 
                               <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4}}>
                                 {[
@@ -1421,7 +1435,7 @@ export default function App() {
       ? [...namedGroups.party1, ...namedGroups.party2, ...namedGroups.party3, ...namedGroups.party4]
       : [...namedGroups.group1, ...namedGroups.group2];
     const unassigned = allNicks.filter(n => !assigned.includes(n));
-    const isLeaderHere = !!members.find(m => m.nick === user?.nick && m.isLeader);
+    const isLeaderHere = user?.isAdmin || !!members.find(m => m.nick === user?.nick && m.isLeader);
 
     const saveGroups = (newGroups) => {
       const newSd = JSON.parse(JSON.stringify(schedules));
@@ -1442,6 +1456,12 @@ export default function App() {
 
     // 공통 드롭 로직 (PC, 모바일 공유)
     const handleDropLogic = (nick, targetGroup) => {
+      // 드래그 전 소속 그룹 감지 (그룹 간 switch 이동 판단용)
+      const groupKeys = isExtra
+        ? ["party1","party2","party3","party4"]
+        : ["group1","group2"];
+      const sourceGroup = groupKeys.find(k => namedGroups[k].includes(nick)) || "unassigned";
+
       const newGroups = isExtra
         ? {
             party1: namedGroups.party1.filter(n => n !== nick),
@@ -1453,8 +1473,14 @@ export default function App() {
             group1: namedGroups.group1.filter(n => n !== nick),
             group2: namedGroups.group2.filter(n => n !== nick),
           };
+
       if (targetGroup !== "unassigned") {
-        if (newGroups[targetGroup].length >= 4) { showToast("각 그룹은 최대 4명입니다.", "#eab308"); return; }
+        // 미배치 → 그룹 이동만 4인 제한 적용
+        // 그룹 간 이동(switch)은 총 인원이 변하지 않으므로 제한 없음
+        if (sourceGroup === "unassigned" && newGroups[targetGroup].length >= 4) {
+          showToast("각 그룹은 최대 4명입니다.", "#eab308");
+          return;
+        }
         newGroups[targetGroup] = [...newGroups[targetGroup], nick];
       }
       saveGroups(newGroups);
@@ -1539,8 +1565,11 @@ export default function App() {
             {title} ({namedGroups[groupKey].length}/4)
           </div>
           {namedGroups[groupKey].map(nick => renderCard(nick))}
-          {isLeaderHere && namedGroups[groupKey].length < 4 && (
-            <div style={{border:"1px dashed #1a1a28",borderRadius:8,padding:"10px 0",textAlign:"center",color:"#2a2a3a",fontSize:11,marginTop:4}}>여기에 드롭</div>
+          {isLeaderHere && (
+            <div style={{border:"1px dashed #1a1a28",borderRadius:8,padding:"8px 0",textAlign:"center",fontSize:11,marginTop:4,
+              color: namedGroups[groupKey].length >= 4 ? "#3a3a5a" : "#2a2a3a"}}>
+              {namedGroups[groupKey].length >= 4 ? "⇄ 드래그로 파티 이동" : "여기에 드롭"}
+            </div>
           )}
         </div>
       </div>
@@ -1558,7 +1587,9 @@ export default function App() {
           </div>
           <p style={{fontSize:11,color:isLeaderHere?"#555":"#eab308",marginBottom:16}}>
             {isLeaderHere
-              ? "멤버를 드래그앤드롭으로 각 네임드 그룹에 배치하세요. (방장만 배치 가능)"
+              ? (user?.isAdmin
+                  ? "👑 관리자 권한으로 모든 슬롯의 파티를 배치할 수 있습니다."
+                  : "멤버를 드래그앤드롭으로 각 네임드 그룹에 배치하세요.")
               : "⚠️ 배치는 방장만 가능합니다. 현재 보기 전용입니다."}
           </p>
           <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
