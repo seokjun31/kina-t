@@ -67,6 +67,8 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  const touchDraggedNick = useRef(null); // 모바일 드래그앤드롭 추적용 ref
+
   const classIconSize = 22;
   const renderClassIcon = (job, size = classIconSize) => {
     if (!job) return "👤";
@@ -180,7 +182,6 @@ export default function App() {
     return isSlotPast(dateStr, slot);
   };
 
-  // ── 로그인 로직 (비동기로 최신 데이터 체크하도록 수정) ──────────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     const v = codeInput.trim().toUpperCase();
     if (v === adminCode) {
@@ -188,7 +189,6 @@ export default function App() {
       setScreen("main"); setTab("admin"); setLoginError(""); return;
     }
 
-    // 다른 사용자가 발급한 최신 코드를 즉시 반영하기 위해 로그인 순간에 DB 재조회
     let currentUsers = users;
     try {
       const freshUsers = await load("kina:users");
@@ -378,11 +378,10 @@ export default function App() {
     showToast("전체 강퇴 완료", "#ef4444");
   };
 
-  // ── 관리자: 대소문자 고정으로 코드 발급 ─────────────────────────────────────
   const handleGenerateAccessCode = (nick) => {
     const now = new Date();
     const expires = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
-    const newCode = genCode().toUpperCase(); // 확실한 매칭을 위해 대문자 고정
+    const newCode = genCode().toUpperCase(); 
     const nextUsers = users.map(u => u.nick === nick ? {
       ...u,
       accessCode: newCode,
@@ -525,7 +524,6 @@ export default function App() {
           <h2 style={{fontSize:17,fontWeight:700,color:"#c4b5fd",marginBottom:4}}>➕ 성역 외 추가모집</h2>
           <p style={{fontSize:12,color:"#444"}}>최대 {max}명 · 4개 파티 고정 운영 (클릭하여 참가)</p>
         </div>
-        {/* 모바일 반응형 클래스 적용 */}
         <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
           {PARTY_SLOTS.map((slot, idx) => {
             const sd = getSlotData(schedules, type, date, slot);
@@ -702,7 +700,6 @@ export default function App() {
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}
         onClick={e => { if(e.target===e.currentTarget){setSlotModal(null);setEditingNotice(false);setClassEditing(false);} }}>
-        {/* 모바일 반응형 클래스 적용 */}
         <div className="mobile-modal" style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto"}}>
 
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
@@ -962,40 +959,37 @@ export default function App() {
             )}
           </div>
 
-          {/* 모바일 반응형 클래스 적용 */}
-          {!user?.isAdmin && !past && (
-            <div className="mobile-col" style={{display:"flex",gap:8}}>
-              {!isMine && !isPending && !isFull && (
-                myJobAllowed ? (
-                  <button onClick={()=>handleRequestJoin(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
-                    {members.length===0 ? "🏠 방 생성" : "📨 참가 신청"}
-                  </button>
-                ) : (
-                  <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>
-                    ⛔ {user?.job} 참가 불가 클래스
-                  </div>
-                )
-              )}
-              {isPending && (
-                <button onClick={()=>handleLeave(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"1px solid #92400e",background:"rgba(146,64,14,.2)",color:"#fbbf24",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  ✕ 신청 취소
+          <div className="mobile-col" style={{display:"flex",gap:8}}>
+            {!isMine && !isPending && !isFull && (
+              myJobAllowed ? (
+                <button onClick={()=>handleRequestJoin(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
+                  {members.length===0 ? "🏠 방 생성" : "📨 참가 신청"}
                 </button>
-              )}
-              {isMine && (
-                <>
-                  <button onClick={()=>handleLeave(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"1px solid #7f1d1d",background:"rgba(127,29,29,.3)",color:"#fca5a5",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer"}}>
-                    ✕ 참석 취소
-                  </button>
-                  <button onClick={()=>setNamedGroupModal({type,date,slot})} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#15803d,#22c55e)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(34,197,94,.35)"}}>
-                    🎯 파티분배
-                  </button>
-                </>
-              )}
-              {isFull && !isMine && !isPending && (
-                <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>🔴 마감된 시간대입니다</div>
-              )}
-            </div>
-          )}
+              ) : (
+                <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>
+                  ⛔ {user?.job} 참가 불가 클래스
+                </div>
+              )
+            )}
+            {isPending && (
+              <button onClick={()=>handleLeave(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"1px solid #92400e",background:"rgba(146,64,14,.2)",color:"#fbbf24",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                ✕ 신청 취소
+              </button>
+            )}
+            {isMine && (
+              <>
+                <button onClick={()=>handleLeave(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"1px solid #7f1d1d",background:"rgba(127,29,29,.3)",color:"#fca5a5",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                  ✕ 참석 취소
+                </button>
+                <button onClick={()=>setNamedGroupModal({type,date,slot})} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#15803d,#22c55e)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(34,197,94,.35)"}}>
+                  🎯 파티분배
+                </button>
+              </>
+            )}
+            {isFull && !isMine && !isPending && (
+              <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>🔴 마감된 시간대입니다</div>
+            )}
+          </div>
           {past && (
             <div style={{padding:"13px",borderRadius:12,background:"#0a0a0a",border:"1px solid #1a1a1a",color:"#333",textAlign:"center",fontSize:13}}>⏱ 종료된 시간대입니다</div>
           )}
@@ -1046,7 +1040,6 @@ export default function App() {
                   style={{width:"100%",padding:"8px 10px",background:"#0a0a14",border:"1px solid #1e1e30",borderRadius:8,color:"#e2d9f3",fontFamily:"inherit",fontSize:12,letterSpacing:4}}
                 />
               </div>
-              {/* 모바일 반응형 클래스 적용 */}
               <button
                 onClick={handleSaveAdminSettings}
                 className="mobile-btn"
@@ -1178,7 +1171,11 @@ export default function App() {
                 {DATE_RANGE.map(d => {
                   const ds = fmtDate(d);
                   const {short, wd} = fmtLabel(d);
-                  const dayData = Object.entries(schedules[type]?.[ds]||{}).filter(([,sd])=>sd.members?.length>0).sort();
+                  const dayData = Object.entries(schedules[type]?.[ds]||{}).filter(([slot,sd])=>{
+                    if(!sd.members?.length) return false;
+                    if(type==="추가") return ds>=TODAY_STR; // 추가모집: 오늘 이전 날짜 숨김
+                    return !isSlotPast(ds,slot);            // 성역/성역2: 지난 시간 슬롯 숨김
+                  }).sort();
                   if (dayData.length===0) return null;
                   return (
                     <div key={ds} style={{marginBottom:14}}>
@@ -1258,9 +1255,9 @@ export default function App() {
     };
 
     return (
-      <div style={{maxWidth:1160,margin:"0 auto",padding:"40px 20px 56px"}}>
-        <div style={{textAlign:"center",marginBottom:36}}>
-          <h1 style={{fontSize:30,fontWeight:900,color:"#c4b5fd",letterSpacing:3,marginBottom:8}}>KINA일정 대시보드</h1>
+      <div style={{maxWidth:1160,margin:"0 auto",padding:"20px 12px 40px"}} className="share-container">
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <h1 className="share-title" style={{fontWeight:900,color:"#c4b5fd",letterSpacing:2,marginBottom:8}}>KINA일정 대시보드</h1>
           <p style={{fontSize:13,color:"#6b7280"}}>접속 코드 없이 이번 주 공대 구성을 한눈에 보는 공유용 화면입니다.</p>
         </div>
 
@@ -1273,11 +1270,11 @@ export default function App() {
           if (!hasAny || ds < TODAY_STR) return null;
 
           return (
-            <div key={ds} style={{marginBottom:24,borderRadius:20,background:"radial-gradient(circle at 0 0,rgba(88,28,135,.3),transparent 55%) #050816",border:"1px solid #111827",padding:20,boxShadow:"0 18px 60px rgba(0,0,0,.65)"}}>
+            <div key={ds} className="share-day-card" style={{marginBottom:24,borderRadius:20,background:"radial-gradient(circle at 0 0,rgba(88,28,135,.3),transparent 55%) #050816",border:"1px solid #111827",padding:20,boxShadow:"0 18px 60px rgba(0,0,0,.65)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <div>
                   <div style={{fontSize:12,color:"#6b7280",marginBottom:2}}>레이드 날짜</div>
-                  <div style={{fontSize:18,fontWeight:700,color:"#e5e7eb"}}>{label}</div>
+                  <div className="share-date-label" style={{fontSize:18,fontWeight:700,color:"#e5e7eb"}}>{label}</div>
                 </div>
                 {ds === TODAY_STR && (
                   <div style={{fontSize:11,color:"#facc15",background:"rgba(250,204,21,.08)",border:"1px solid rgba(250,204,21,.4)",padding:"4px 10px",borderRadius:999}}>
@@ -1303,7 +1300,7 @@ export default function App() {
                       : "추가모집";
 
                   return (
-                    <div key={type} style={{borderRadius:20,background:"#020617",border:"1px solid #111827",padding:18}}>
+                    <div key={type} className="share-type-card" style={{borderRadius:20,background:"#020617",border:"1px solid #111827",padding:18}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                         <div style={{fontSize:15,fontWeight:800,color:"#a5b4fc"}}>⚔️ {title}</div>
                         <div style={{fontSize:12,color:"#6b7280"}}>{dayData.length}개 시간대</div>
@@ -1323,19 +1320,16 @@ export default function App() {
                           const unassigned = members.filter(m => !grouped.has(m.nick));
                           const isPast = !isExtra && !slot.startsWith("party-") ? isSlotPast(ds, slot) : false;
 
+                          // 대시보드 사용자 목록: 아이디 / 직업만 렌더링되도록 수정 (글자 크기 축소)
                           const renderPerson = (m) => {
                             if (!m) return null;
-                            const info = getUserInfo(m.nick);
                             return (
-                              <div key={m.nick} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",fontSize:16}}>
-                                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                                  {m.isLeader && <span style={{color:"#fbbf24",fontSize:18}}>👑</span>}
-                                  <span style={{color:m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:600,fontSize:17}}>{m.nick}</span>
-                                  {m.job && <span style={{color:CLASS_COLORS[m.job]||"#9ca3af",fontSize:14,fontWeight:600}}>{m.job}</span>}
+                              <div key={m.nick} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                  {m.isLeader && <span style={{color:"#fbbf24",fontSize:12}}>👑</span>}
+                                  <span className="share-nick" style={{color:m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:500,fontSize:13}}>{m.nick}</span>
                                 </div>
-                                {info?.atul && (
-                                  <span style={{fontSize:15,color:"#a78bfa",fontWeight:700}}>아툴 {info.atul}</span>
-                                )}
+                                {m.job && <span style={{color:CLASS_COLORS[m.job]||"#9ca3af",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>{m.job}</span>}
                               </div>
                             );
                           };
@@ -1344,7 +1338,7 @@ export default function App() {
                           const avg2 = calcAvgAtul(group2);
 
                           return (
-                            <div key={slot} style={{
+                            <div key={slot} className="share-slot-card" style={{
                               borderRadius:18,
                               background:"radial-gradient(circle at 0 0,rgba(79,70,229,.25),transparent 55%) #020617",
                               border:"1px solid #111827",
@@ -1354,7 +1348,7 @@ export default function App() {
                               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                                 <div>
                                   <div style={{fontSize:12,color:"#64748b"}}>시작 시간</div>
-                                  <div style={{fontSize:18,fontWeight:800,color:"#e5e7eb"}}>{slot}</div>
+                                  <div className="share-slot-time" style={{fontSize:18,fontWeight:800,color:"#e5e7eb"}}>{slot}</div>
                                 </div>
                                 <div style={{textAlign:"right"}}>
                                   <div style={{fontSize:12,color:"#64748b"}}>인원</div>
@@ -1364,14 +1358,13 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* 모바일 반응형 클래스 적용 */}
                               <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4}}>
                                 {[
                                   {label:"1파티", group:group1, avg:avg1},
                                   {label:"2파티", group:group2, avg:avg2},
                                 ].map(party => (
-                                  <div key={party.label} style={{borderRadius:14,background:"#020617",border:"1px solid #111827",padding:10}}>
-                                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                  <div key={party.label} className="share-party-card" style={{borderRadius:14,background:"#020617",border:"1px solid #111827",padding:10}}>
+                                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4,marginBottom:6}}>
                                       <div style={{fontSize:12,color:"#e5e7eb",fontWeight:700}}>{party.label}</div>
                                       <div style={{fontSize:11,color:party.avg?"#38bdf8":"#4b5563"}}>
                                         {party.avg ? `아툴 평균 ${party.avg}` : "아툴 정보 없음"}
@@ -1447,11 +1440,8 @@ export default function App() {
       setSchedules({...newSd}); persist(users, newSd);
     };
 
-    const handleDrop = (e, targetGroup) => {
-      if (!isLeaderHere) return; 
-      e.preventDefault();
-      const nick = e.dataTransfer.getData("nick");
-      if (!nick) return;
+    // 공통 드롭 로직 (PC, 모바일 공유)
+    const handleDropLogic = (nick, targetGroup) => {
       const newGroups = isExtra
         ? {
             party1: namedGroups.party1.filter(n => n !== nick),
@@ -1470,6 +1460,40 @@ export default function App() {
       saveGroups(newGroups);
     };
 
+    // PC용 드래그 이벤트
+    const handleDrop = (e, targetGroup) => {
+      if (!isLeaderHere) return; 
+      e.preventDefault();
+      const nick = e.dataTransfer.getData("nick");
+      if (!nick) return;
+      handleDropLogic(nick, targetGroup);
+    };
+
+    // 모바일용 터치 이벤트
+    const handleTouchStart = (e, nick) => {
+      if (!isLeaderHere) return;
+      touchDraggedNick.current = nick;
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isLeaderHere || !touchDraggedNick.current) return;
+      // 터치스크롤 방지 (css touchAction 속성과 함께 동작)
+      if (e.cancelable) e.preventDefault();
+    };
+
+    const handleTouchEnd = (e) => {
+      if (!isLeaderHere || !touchDraggedNick.current) return;
+      const touch = e.changedTouches[0];
+      const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+      const zone = elem?.closest('[data-droppable="true"]');
+
+      if (zone) {
+        const targetGroup = zone.getAttribute('data-group');
+        handleDropLogic(touchDraggedNick.current, targetGroup);
+      }
+      touchDraggedNick.current = null;
+    };
+
     const renderCard = (nick) => {
       const member = members.find(m => m.nick === nick);
       const uInfo = users.find(u => u.nick === nick);
@@ -1478,7 +1502,22 @@ export default function App() {
         <div key={nick}
           draggable={isLeaderHere}
           onDragStart={isLeaderHere ? (e => { e.dataTransfer.setData("nick", nick); }) : undefined}
-          style={{background:"#0d0d18",border:`1px solid ${CLASS_COLORS[member.job]||"#2a2a3a"}`,borderRadius:10,padding:"8px 10px",cursor:isLeaderHere?"grab":"default",userSelect:"none",display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+          onTouchStart={isLeaderHere ? (e => handleTouchStart(e, nick)) : undefined}
+          onTouchMove={isLeaderHere ? handleTouchMove : undefined}
+          onTouchEnd={isLeaderHere ? handleTouchEnd : undefined}
+          style={{
+            background:"#0d0d18",
+            border:`1px solid ${CLASS_COLORS[member.job]||"#2a2a3a"}`,
+            borderRadius:10,
+            padding:"8px 10px",
+            cursor:isLeaderHere?"grab":"default",
+            userSelect:"none",
+            touchAction: isLeaderHere ? "none" : "auto", // 모바일 드래그 시 화면 스크롤 방지
+            display:"flex",
+            alignItems:"center",
+            gap:8,
+            marginBottom:6
+          }}>
           <div style={{fontSize:20}}>{renderClassIcon(member.job,24)}</div>
           <div style={{flex:1}}>
             <div style={{fontSize:12,fontWeight:700,color:member.isLeader?"#fbbf24":"#e2d9f3"}}>{member.isLeader?"👑 ":""}{nick}</div>
@@ -1491,6 +1530,8 @@ export default function App() {
 
     const renderZone = (groupKey, title, color) => (
       <div style={{flex:1,minWidth:150}}
+        data-droppable="true"
+        data-group={groupKey}
         onDragOver={isLeaderHere ? (e=>e.preventDefault()) : undefined}
         onDrop={isLeaderHere ? (e=>handleDrop(e,groupKey)) : undefined}>
         <div style={{background:`${color}0d`,border:`1px dashed ${color}66`,borderRadius:12,padding:12,minHeight:200}}>
@@ -1508,7 +1549,6 @@ export default function App() {
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:16}}
         onClick={e=>{if(e.target===e.currentTarget)setNamedGroupModal(null);}}>
-        {/* 모바일 반응형 클래스 적용 */}
         <div className="mobile-modal" style={{background:"#111120",border:"1px solid #22c55e55",borderRadius:20,padding:24,maxWidth:620,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <h3 style={{fontSize:16,fontWeight:700,color:"#22c55e"}}>
@@ -1538,13 +1578,14 @@ export default function App() {
           </div>
           {unassigned.length > 0 && (
             <div style={{background:"#0a0a10",border:"1px dashed #2a2a3a",borderRadius:12,padding:12}}
+              data-droppable="true"
+              data-group="unassigned"
               onDragOver={isLeaderHere ? (e=>e.preventDefault()) : undefined}
               onDrop={isLeaderHere ? (e=>handleDrop(e,"unassigned")) : undefined}>
               <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:8}}>⏳ 미배치 ({unassigned.length}명){isLeaderHere?" — 드래그하여 그룹에 배치하세요":""}</div>
               {unassigned.map(nick => renderCard(nick))}
             </div>
           )}
-          {/* 모바일 반응형 클래스 적용 */}
           <div className="mobile-col" style={{display:"flex",gap:8,marginTop:16}}>
             <button onClick={()=>setNamedGroupModal(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>닫기</button>
             <button onClick={()=>{setNamedGroupModal(null);setSlotModal({type,date,slot});setEditingNotice(false);setClassEditing(false);setNoticeEdit(sd.notice||"");}} style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#15803d,#22c55e)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>✅ 저장 완료 — 파티모집으로 돌아가기</button>
@@ -1554,7 +1595,6 @@ export default function App() {
     );
   };
 
-  // ── 로딩 화면 ────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div style={{minHeight:"100vh",background:"#08080f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:24,fontFamily:"'Noto Sans KR',sans-serif"}}>
@@ -1582,7 +1622,6 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background:#4a3aaa; border-radius:2px; }
         textarea, input { outline:none; }
 
-        /* 모바일 반응형용 CSS 추가 */
         @media (max-width: 600px) {
           .mobile-col { flex-direction: column !important; }
           .mobile-grid-1 { grid-template-columns: 1fr !important; }
@@ -1643,7 +1682,6 @@ export default function App() {
       {extraDraft && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setExtraDraft(null);}}>
-          {/* 모바일 반응형 클래스 적용 */}
           <div className="mobile-modal" style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:26,maxWidth:480,width:"100%"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <h3 style={{fontSize:16,fontWeight:700,color:"#c4b5fd"}}>🏠 파티 생성</h3>
@@ -1710,7 +1748,6 @@ export default function App() {
               />
             </div>
 
-            {/* 모바일 반응형 클래스 적용 */}
             <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setExtraDraft(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
               <button onClick={confirmCreateExtraParty} style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
@@ -1727,7 +1764,6 @@ export default function App() {
 
       {moveModal && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}>
-          {/* 모바일 반응형 클래스 적용 */}
           <div className="mobile-modal" style={{background:"#111120",border:"1px solid rgba(251,191,36,.3)",borderRadius:20,padding:30,maxWidth:360,width:"100%",textAlign:"center"}}>
             <div style={{fontSize:44,marginBottom:16}}>⚠️</div>
             <h3 style={{color:"#fbbf24",fontSize:18,fontWeight:700,marginBottom:12}}>시간대 변경</h3>
@@ -1735,7 +1771,6 @@ export default function App() {
               이미 <strong style={{color:"#c4b5fd"}}>{moveModal.fromType&&moveModal.fromType!==moveModal.type?`[${moveModal.fromType}] `:""}{moveModal.fromDate!==selectedDate?moveModal.fromDate+" ":""}{moveModal.fromSlot}</strong>에<br/>등록되어 있습니다.<br/>
               <strong style={{color:"#a78bfa"}}>{moveModal.toDate!==selectedDate?moveModal.toDate+" ":""}{moveModal.toSlot}</strong>으로 이동할까요?
             </p>
-            {/* 모바일 반응형 클래스 적용 */}
             <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setMoveModal(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
               <button onClick={confirmMove} style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>이동하기</button>
@@ -1746,12 +1781,10 @@ export default function App() {
 
       {kickConfirm && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16}}>
-          {/* 모바일 반응형 클래스 적용 */}
           <div className="mobile-modal" style={{background:"#111120",border:"1px solid rgba(239,68,68,.3)",borderRadius:20,padding:28,maxWidth:330,width:"100%",textAlign:"center"}}>
             <div style={{fontSize:38,marginBottom:14}}>🚫</div>
             <h3 style={{color:"#ef4444",fontSize:17,fontWeight:700,marginBottom:10}}>참석자 퇴출</h3>
             <p style={{color:"#888",fontSize:13,lineHeight:1.6,marginBottom:22}}><strong style={{color:"#fca5a5",fontSize:15}}>{kickConfirm.nick}</strong>님을<br/>이 시간대에서 퇴출하시겠습니까?</p>
-            {/* 모바일 반응형 클래스 적용 */}
             <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setKickConfirm(null)} style={{flex:1,padding:"11px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
               <button onClick={()=>handleKick(kickConfirm.type,kickConfirm.date,kickConfirm.slot,kickConfirm.nick)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:"rgba(127,29,29,.8)",color:"#fca5a5",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>퇴출하기</button>

@@ -154,3 +154,86 @@ button:focus-visible {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* ─── 공유 대시보드 파티 그리드 ─────────────────────────────────────────────
+   모바일(< 600px): 1열 전체폭, 600px 이상: 2열 나란히                       */
+.mobile-grid-1 {
+  grid-template-columns: 1fr !important;
+}
+@media (min-width: 600px) {
+  .mobile-grid-1 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* ─── 한국어 텍스트 줄바꿈 ──────────────────────────────────────────────────
+   음절 단위 강제 줄바꿈 방지, 단어 단위로만 줄바꿈                            */
+body {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* ─── 공유 대시보드 타이틀 반응형 ──────────────────────────────────────────── */
+.share-title {
+  font-size: 20px;
+  letter-spacing: 1px;
+  margin-bottom: 4px !important;
+}
+@media (min-width: 600px) {
+  .share-title {
+    font-size: 30px;
+    letter-spacing: 3px;
+    margin-bottom: 8px !important;
+  }
+  .share-container {
+    padding: 40px 20px 56px !important;
+  }
+}
+
+/* ─── 공유 대시보드 카드 모바일 최적화 ──────────────────────────────────────
+   모바일: 패딩·폰트·간격 축소 → 600px 이상: 원래 크기로 복원             */
+
+/* 날짜(일) 카드 */
+.share-day-card {
+  padding: 10px !important;
+  margin-bottom: 10px !important;
+  border-radius: 12px !important;
+}
+/* 날짜 레이블 */
+.share-date-label {
+  font-size: 15px !important;
+}
+/* 레이드 타입 카드 (성역·성역2·추가) */
+.share-type-card {
+  padding: 10px !important;
+  border-radius: 12px !important;
+}
+/* 슬롯(시간대) 카드 */
+.share-slot-card {
+  padding: 10px !important;
+  border-radius: 10px !important;
+}
+/* 슬롯 시작 시간 */
+.share-slot-time {
+  font-size: 15px !important;
+}
+/* 파티 카드 (1파티·2파티) */
+.share-party-card {
+  padding: 8px !important;
+  border-radius: 8px !important;
+}
+/* 닉네임 */
+.share-nick {
+  font-size: 12px !important;
+}
+
+/* 600px 이상: 원래 크기 복원 */
+@media (min-width: 600px) {
+  .share-day-card    { padding: 20px !important; margin-bottom: 24px !important; border-radius: 20px !important; }
+  .share-date-label  { font-size: 18px !important; }
+  .share-type-card   { padding: 18px !important; border-radius: 20px !important; }
+  .share-slot-card   { padding: 14px !important; border-radius: 18px !important; }
+  .share-slot-time   { font-size: 18px !important; }
+  .share-party-card  { padding: 10px !important; border-radius: 14px !important; }
+  .share-nick        { font-size: 13px !important; }
+}
