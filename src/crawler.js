@@ -1,9 +1,7 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs';
-//const fs = require('fs'); 
 
 (async () => {
-  // 1. GitHub Actions(리눅스 서버)에서 크래시 나지 않도록 샌드박스 비활성화 옵션 추가
   const browser = await puppeteer.launch({ 
     headless: "new",
     args: ['--no-sandbox', '--disable-setuid-sandbox'] 
@@ -12,15 +10,31 @@ import fs from 'fs';
   
   await page.setViewport({ width: 1280, height: 1080 });
 
+  // 1. 실제 사용자(크롬 브라우저)처럼 보이도록 설정 추가
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
+  await page.setExtraHTTPHeaders({
+    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+  });
+
   const url = 'https://www.aion2tool.com/region/%EB%B0%94%EB%B0%94%EB%A3%BD/%ED%82%A4%EB%82%98';
   console.log('페이지 접속 중...');
   
   await page.goto(url, { waitUntil: 'networkidle2' });
 
+  // 2. 접속 직후의 화면을 캡처하여 원인 분석 (public 폴더에 저장)
+  console.log('서버 접속 화면 스크린샷 저장 중...');
   try {
-    await page.waitForSelector('a.nickname-link', { timeout: 5000 });
+    await page.screenshot({ path: './public/debug_screenshot.png', fullPage: true });
+    console.log('✅ 디버그용 스크린샷 저장 완료 (public/debug_screenshot.png)');
+  } catch (err) {
+    console.log('❌ 스크린샷 저장 실패:', err.message);
+  }
+
+  try {
+    // 3. 넉넉하게 15초(15000ms) 대기하도록 수정
+    await page.waitForSelector('a.nickname-link', { timeout: 15000 });
   } catch (error) {
-    console.log('데이터 로딩 지연 중...');
+    console.log('데이터 로딩 지연 중... (GitHub에서 debug_screenshot.png를 확인해 보세요)');
   }
 
   console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다 (약 2~3초 소요)...');
@@ -30,7 +44,6 @@ import fs from 'fs';
 
   console.log('데이터 추출 시작...');
   
-  // 2. React에서 다루기 쉽도록 배열(Array) 형태로 추출
   const extractedArray = await page.evaluate(() => {
     const rows = document.querySelectorAll('tbody tr'); 
     const dataList = [];
@@ -52,13 +65,12 @@ import fs from 'fs';
       const atoolScore = tds[4] ? tds[4].innerText.trim().replace(/,/g, '') : ''; 
       const combatPower = tds[5] ? tds[5].innerText.trim().replace(/,/g, '') : '';
 
-      // 객체 형태로 담아줍니다 (나중에 React에서 쓸 때 편합니다)
       dataList.push({
         nick: nickname,
         job: job,
         atul: atoolScore,
         ilv: combatPower,
-        code: Math.random().toString(36).substring(2,6).toUpperCase() // 임시 접속 코드
+        code: Math.random().toString(36).substring(2,6).toUpperCase()
       });
     });
 
@@ -68,7 +80,6 @@ import fs from 'fs';
   const totalCount = extractedArray ? extractedArray.length : 0;
   console.log(`\n🎉 총 ${totalCount}명의 데이터를 찾았습니다!`);
 
-  // 3. React가 바로 읽을 수 있게 public 폴더에 JSON 형태로 저장
   const fileName = './public/aion2_legion_data.json'; 
   try {
     fs.writeFileSync(fileName, JSON.stringify(extractedArray, null, 2), 'utf-8');
