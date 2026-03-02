@@ -18,7 +18,7 @@ export const getDateRange = () => {
   const thisWed = new Date(today);
   thisWed.setDate(today.getDate() - diffToWed); // 과거 방향으로 이동
   thisWed.setHours(0, 0, 0, 0);
-  return Array.from({length: 8}, (_, i) => {
+  return Array.from({length: 15}, (_, i) => {
     const d = new Date(thisWed);
     d.setDate(thisWed.getDate() + i);
     return d;

@@ -32,8 +32,20 @@ export default function App() {
     }
   })();
 
-  const [screen, setScreen] = useState(initialScreen);
-  const [user, setUser] = useState(null);
+  const savedSession = (() => {
+    if (initialScreen === "share") return null;
+    try {
+      const raw = localStorage.getItem('kina_session');
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (Date.now() - s.loginAt < 3 * 60 * 60 * 1000) return s;
+      localStorage.removeItem('kina_session');
+      return null;
+    } catch { return null; }
+  })();
+
+  const [screen, setScreen] = useState(savedSession ? "main" : initialScreen);
+  const [user, setUser] = useState(savedSession || null);
   const [codeInput, setCodeInput] = useState("");
   const [loginError, setLoginError] = useState("");
 
@@ -43,7 +55,7 @@ export default function App() {
 
   const [schedules, setSchedules] = useState({"성역":{},"성역2":{},"추가":{}});
 
-  const [tab, setTab] = useState("schedule");
+  const [tab, setTab] = useState(savedSession?.isAdmin ? "admin" : "schedule");
   const [selectedDate, setSelectedDate] = useState(fmtDate(DATE_RANGE[0]));
   const [slotModal, setSlotModal] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
@@ -57,6 +69,7 @@ export default function App() {
   const [classEditing, setClassEditing] = useState(false);
   const [namedGroupModal, setNamedGroupModal] = useState(null); 
   const [extraDraft, setExtraDraft] = useState(null);
+  const [externalForm, setExternalForm] = useState(null); // null or {nick:"", job:""}
   const [slotAddSearch, setSlotAddSearch] = useState("");
   const [adminCode, setAdminCode] = useState(ADMIN_CODE);
   const [raidNames, setRaidNames] = useState({ primary:"성역", secondary:"성역2" });
@@ -87,6 +100,19 @@ export default function App() {
   const showToast = (msg, color="#6d4aff") => {
     setToast({msg, color});
     setTimeout(() => setToast(null), 2800);
+  };
+
+  // 슬롯 키에서 베이스 시간 추출: "20:00#2" → "20:00"
+  const getBaseSlot = (slot) => slot.includes('#') ? slot.split('#')[0] : slot;
+
+  // 해당 시간대에서 다음 생성 가능한 슬롯 키 반환 (최대 10개)
+  const getNextAvailableSlot = (sd, type, date, baseSlot) => {
+    if (!sd[type]?.[date]?.[baseSlot]?.members?.length) return baseSlot;
+    for (let i = 2; i <= 10; i++) {
+      const key = `${baseSlot}#${i}`;
+      if (!sd[type]?.[date]?.[key]?.members?.length) return key;
+    }
+    return null;
   };
 
   const DEFAULT_USERS = [
@@ -179,12 +205,14 @@ export default function App() {
   const isSlotClosed = (type, dateStr, slot) => {
     const sd = getSlotData(schedules, type, dateStr, slot);
     if (sd.members.length >= maxOf(type)) return true;
-    return isSlotPast(dateStr, slot);
+    return isSlotPast(dateStr, getBaseSlot(slot));
   };
 
   const handleLogin = async () => {
     const v = codeInput.trim().toUpperCase();
     if (v === adminCode) {
+      const adminSess = {isAdmin:true, nick:"관리자", loginAt:Date.now()};
+      localStorage.setItem('kina_session', JSON.stringify(adminSess));
       setUser({isAdmin:true, nick:"관리자"});
       setScreen("main"); setTab("admin"); setLoginError(""); return;
     }
@@ -207,54 +235,50 @@ export default function App() {
       new Date(u.codeExpiresAt).getTime() > nowMs
     );
     
-    if (found) { setUser(found); setScreen("main"); setTab("schedule"); setLoginError(""); }
+    if (found) {
+      localStorage.setItem('kina_session', JSON.stringify({...found, loginAt:Date.now()}));
+      setUser(found); setScreen("main"); setTab("schedule"); setLoginError("");
+    }
     else setLoginError("암호가 올바르지 않습니다.");
   };
 
   const handleRequestJoin = (type, date, slot) => {
-    if (!user || user.isAdmin) return;
+    if (!user) return;
+    const isPartySlot = slot.startsWith("party-");
+    if (!isPartySlot && isSlotPast(date, getBaseSlot(slot))) { showToast("이미 지난 시간대입니다.", "#ef4444"); return; }
+
     const sd = JSON.parse(JSON.stringify(schedules));
     if (!sd[type]) sd[type] = {};
     if (!sd[type][date]) sd[type][date] = {};
-    if (!sd[type][date][slot]) sd[type][date][slot] = {members:[], requiredClasses:[], pendingRequests:[], notice:""};
 
-    const slotData = sd[type][date][slot];
-    const max = maxOf(type);
+    const baseSlot = getBaseSlot(slot);
+    const targetSlot = getNextAvailableSlot(sd, type, date, baseSlot);
+    if (!targetSlot) { showToast("더 이상 방을 만들 수 없습니다. (최대 10개)", "#ef4444"); return; }
+
+    if (!sd[type][date][targetSlot]) sd[type][date][targetSlot] = {members:[], requiredClasses:[], pendingRequests:[], notice:""};
+    const slotData = sd[type][date][targetSlot];
 
     if (slotData.members.find(m => m.nick === user.nick)) { showToast("이미 참석 중입니다.", "#eab308"); return; }
-    if (slotData.pendingRequests?.find(m => m.nick === user.nick)) { showToast("이미 신청 중입니다.", "#eab308"); return; }
-    if (slotData.members.length >= max) { showToast("인원이 마감되었습니다.", "#ef4444"); return; }
-    if (isSlotPast(date, slot)) { showToast("이미 지난 시간대입니다.", "#ef4444"); return; }
 
-    const req = slotData.requiredClasses || [];
-    if (req.length > 0 && user.job && !req.includes(user.job)) {
-      showToast(`${user.job}은(는) 이 방에 참가할 수 없습니다.`, "#ef4444"); return;
+    if (!user.isAdmin) {
+      const otherEntry = findMyOtherSlot(sd, type, date, targetSlot);
+      if (otherEntry) { setMoveModal({fromType:otherEntry.fromType, type, fromDate:otherEntry.d, fromSlot:otherEntry.sl, toDate:date, toSlot:targetSlot}); setSlotModal(null); return; }
     }
 
-    if (slotData.members.length === 0) {
-      let otherEntry = findMyOtherSlot(sd, type, date, slot);
-      if (otherEntry) { setMoveModal({fromType:otherEntry.fromType, type, fromDate:otherEntry.d, fromSlot:otherEntry.sl, toDate:date, toSlot:slot, isPending:otherEntry.isPending}); setSlotModal(null); return; }
-      slotData.members.push({nick:user.nick, job:user.job, isLeader:true, classes:[]});
-      setSchedules({...sd}); persist(users, sd); setSlotModal(null);
-      showToast("방 생성 완료! 방장이 되었습니다 👑", "#fbbf24"); return;
-    }
-
-    if (!slotData.pendingRequests) slotData.pendingRequests = [];
-    let otherEntry2 = findMyOtherSlot(sd, type, date, slot);
-    if (otherEntry2) { setMoveModal({fromType:otherEntry2.fromType, type, fromDate:otherEntry2.d, fromSlot:otherEntry2.sl, toDate:date, toSlot:slot, isPending:otherEntry2.isPending, joinAsPending:true}); setSlotModal(null); return; }
-    slotData.pendingRequests.push({nick:user.nick, job:user.job});
+    slotData.members.push({nick:user.nick, job:user.job, isLeader:true, classes:[]});
     setSchedules({...sd}); persist(users, sd);
-    showToast("참가 신청 완료! 방장 수락을 기다려주세요 ⏳", "#a78bfa");
+    setSlotModal({type, date, slot:targetSlot});
+    setEditingNotice(false); setClassEditing(false); setNoticeEdit("");
+    showToast("방 생성 완료! 방장이 되었습니다 👑", "#fbbf24");
   };
 
   const findMyOtherSlot = (sd, type, date, slot) => {
     for (const [t, dates] of Object.entries(sd)) {
-      if (t !== type) continue; 
+      if (t !== type) continue;
       for (const [d, slots] of Object.entries(dates || {})) {
         for (const [sl, sdata] of Object.entries(slots)) {
           if (d === date && sl === slot) continue;
           if (sdata.members?.find(m => m.nick === user.nick)) return {fromType:t, d, sl};
-          if (sdata.pendingRequests?.find(m => m.nick === user.nick)) return {fromType:t, d, sl, isPending:true};
         }
       }
     }
@@ -285,16 +309,12 @@ export default function App() {
   };
 
   const handleLeave = (type, date, slot) => {
-    if (!user || user.isAdmin) return;
+    if (!user) return;
     const sd = JSON.parse(JSON.stringify(schedules));
     const slotData = sd[type]?.[date]?.[slot];
     if (!slotData) return;
     const idx = slotData.members.findIndex(m => m.nick === user.nick);
-    if (idx === -1) {
-      slotData.pendingRequests = slotData.pendingRequests?.filter(m => m.nick !== user.nick) || [];
-      setSchedules({...sd}); persist(users, sd); setSlotModal(null);
-      showToast("신청을 취소했습니다.", "#f97316"); return;
-    }
+    if (idx === -1) { setSlotModal(null); return; }
     const wasLeader = slotData.members[idx].isLeader;
     const upd = slotData.members.filter(m => m.nick !== user.nick);
     if (wasLeader && upd.length > 0) upd[0].isLeader = true;
@@ -312,40 +332,31 @@ export default function App() {
 
   const confirmMove = () => {
     if (!moveModal) return;
-    const {fromType, type, fromDate, fromSlot, toDate, toSlot, isPending, joinAsPending} = moveModal;
+    const {fromType, type, fromDate, fromSlot, toDate, toSlot} = moveModal;
     const effectiveFromType = fromType || type;
     const sd = JSON.parse(JSON.stringify(schedules));
     const fromData = sd[effectiveFromType]?.[fromDate]?.[fromSlot];
     if (fromData) {
-      if (isPending) {
-        fromData.pendingRequests = fromData.pendingRequests?.filter(m => m.nick !== user.nick) || [];
-      } else {
-        const fi = fromData.members.findIndex(m => m.nick === user.nick);
-        if (fi !== -1) {
-          const wasLeader = fromData.members[fi].isLeader;
-          const upd = fromData.members.filter(m => m.nick !== user.nick);
-          if (wasLeader && upd.length > 0) upd[0].isLeader = true;
-          if (wasLeader) fromData.notice = "";
-          fromData.members = upd;
-        }
+      const fi = fromData.members.findIndex(m => m.nick === user.nick);
+      if (fi !== -1) {
+        const wasLeader = fromData.members[fi].isLeader;
+        const upd = fromData.members.filter(m => m.nick !== user.nick);
+        if (wasLeader && upd.length > 0) upd[0].isLeader = true;
+        if (wasLeader) fromData.notice = "";
+        fromData.members = upd;
       }
     }
     if (!sd[type]) sd[type] = {};
     if (!sd[type][toDate]) sd[type][toDate] = {};
     if (!sd[type][toDate][toSlot]) sd[type][toDate][toSlot] = {members:[], requiredClasses:[], pendingRequests:[], notice:""};
     const toData = sd[type][toDate][toSlot];
-    if (joinAsPending) {
-      if (!toData.pendingRequests) toData.pendingRequests = [];
-      toData.pendingRequests.push({nick:user.nick, job:user.job});
-      setSchedules({...sd}); persist(users, sd); setMoveModal(null);
-      showToast("기존 참석 취소 후 참가 신청 완료! ⏳", "#a78bfa");
-    } else {
-      if (toData.members.length >= maxOf(type)) { showToast("이동할 슬롯이 마감되었습니다.", "#ef4444"); setMoveModal(null); return; }
-      const isFirst = toData.members.length === 0;
-      toData.members.push({nick:user.nick, job:user.job, isLeader:isFirst, classes:[]});
-      setSchedules({...sd}); persist(users, sd); setMoveModal(null);
-      showToast(`${effectiveFromType !== type ? effectiveFromType+"→"+type+" " : ""}이동 완료!`, "#22c55e");
-    }
+    if (toData.members.length >= maxOf(type)) { showToast("이동할 슬롯이 마감되었습니다.", "#ef4444"); setMoveModal(null); return; }
+    const isFirst = toData.members.length === 0;
+    toData.members.push({nick:user.nick, job:user.job, isLeader:isFirst, classes:[]});
+    setSchedules({...sd}); persist(users, sd); setMoveModal(null);
+    setSlotModal({type, date:toDate, slot:toSlot});
+    setEditingNotice(false); setClassEditing(false); setNoticeEdit(toData.notice||"");
+    showToast("이동 완료!", "#22c55e");
   };
 
   const handleKick = (type, date, slot, nick) => {
@@ -366,6 +377,22 @@ export default function App() {
     slotData.pendingRequests = slotData.pendingRequests?.filter(m => m.nick !== nick) || [];
     setSchedules({...sd}); persist(users, sd); setKickConfirm(null);
     showToast(`${nick} 퇴출 완료`, "#ef4444");
+  };
+
+  const handleAddExternal = (type, date, slot) => {
+    if (!externalForm || !externalForm.nick.trim()) { showToast("이름을 입력하세요.", "#eab308"); return; }
+    const sd2 = JSON.parse(JSON.stringify(schedules));
+    if (!sd2[type]) sd2[type] = {};
+    if (!sd2[type][date]) sd2[type][date] = {};
+    if (!sd2[type][date][slot]) sd2[type][date][slot] = {members:[], requiredClasses:[], pendingRequests:[], notice:""};
+    const slotData2 = sd2[type][date][slot];
+    const max = maxOf(type);
+    if (slotData2.members.length >= max) { showToast("인원이 마감되었습니다.", "#ef4444"); return; }
+    if (slotData2.members.find(m => m.nick === externalForm.nick.trim())) { showToast("동일한 이름이 이미 있습니다.", "#eab308"); return; }
+    slotData2.members.push({nick:externalForm.nick.trim(), job:externalForm.job.trim() || "미등록", isExternal:true, isLeader:false, classes:[]});
+    setSchedules({...sd2}); persist(users, sd2);
+    setExternalForm(null);
+    showToast(`${externalForm.nick.trim()} (외부) 추가 완료!`, "#22c55e");
   };
 
   const handleAdminClearSlot = (type, date, slot) => {
@@ -434,12 +461,12 @@ export default function App() {
   };
 
   const handleCreateExtraParty = () => {
-    if (!user || user.isAdmin) return;
-    setExtraDraft({requiredClasses:[], notice:""});
+    if (!user) return;
+    setExtraDraft({notice:""});
   };
 
   const confirmCreateExtraParty = () => {
-    if (!user || user.isAdmin || !extraDraft) return;
+    if (!user || !extraDraft) return;
     const type = "추가";
     const sd = JSON.parse(JSON.stringify(schedules));
     if (!sd[type]) sd[type] = {};
@@ -455,7 +482,7 @@ export default function App() {
     if (!partySlot) { showToast("더 이상 파티를 생성할 수 없습니다.", "#ef4444"); return; }
     sd[type][today][partySlot] = {
       members:[{nick:user.nick, job:user.job, isLeader:true, classes:[]}],
-      requiredClasses: extraDraft.requiredClasses,
+      requiredClasses: [],
       pendingRequests:[],
       notice: extraDraft.notice
     };
@@ -492,13 +519,13 @@ export default function App() {
   };
 
   const amILeader = (type, date, slot) =>
-    !!(user && !user.isAdmin && getSlotData(schedules, type, date, slot).members?.find(m => m.nick === user.nick && m.isLeader));
+    !!(user && getSlotData(schedules, type, date, slot).members?.find(m => m.nick === user.nick && m.isLeader));
 
   const amIIn = (type, date, slot) =>
-    !!(user && !user.isAdmin && getSlotData(schedules, type, date, slot).members?.find(m => m.nick === user.nick));
+    !!(user && getSlotData(schedules, type, date, slot).members?.find(m => m.nick === user.nick));
 
-  const amIPending = (type, date, slot) =>
-    !!(user && !user.isAdmin && getSlotData(schedules, type, date, slot).pendingRequests?.find(m => m.nick === user.nick));
+  // pendingRequests 시스템 제거됨 — 항상 false 반환
+  const amIPending = () => false;
 
   const downloadUsersTxt = () => {
     const lines = users
@@ -515,82 +542,94 @@ export default function App() {
 
   const renderExtraParties = () => {
     const type = "추가";
-    const max = maxOf(type); 
+    const max = maxOf(type);
     const date = TODAY_STR;
-    const PARTY_SLOTS = ["party-1","party-2","party-3","party-4"];
+    const daySlots = Object.entries(schedules[type]?.[date] || {})
+      .filter(([, sd]) => sd.members?.length > 0)
+      .sort(([a], [b]) => {
+        const aNum = parseInt(a.replace("party-", "")) || 0;
+        const bNum = parseInt(b.replace("party-", "")) || 0;
+        return aNum - bNum;
+      });
     return (
       <div>
-        <div style={{marginBottom:20}}>
-          <h2 style={{fontSize:17,fontWeight:700,color:"#c4b5fd",marginBottom:4}}>➕ 성역 외 추가모집</h2>
-          <p style={{fontSize:12,color:"#444"}}>최대 {max}명 · 4개 파티 고정 운영 (클릭하여 참가)</p>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12}}>
+          <div>
+            <h2 style={{fontSize:17,fontWeight:700,color:"#c4b5fd",marginBottom:4}}>➕ 성역 외 추가모집</h2>
+            <p style={{fontSize:12,color:"#444"}}>최대 {max}명 · 자유 파티 운영 (방 생성 후 클릭하여 관리)</p>
+          </div>
+          <button onClick={handleCreateExtraParty} style={{padding:"10px 20px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,boxShadow:"0 4px 16px rgba(109,74,255,.4)",whiteSpace:"nowrap"}}>
+            🏠 방 생성
+          </button>
         </div>
-        <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
-          {PARTY_SLOTS.map((slot, idx) => {
-            const sd = getSlotData(schedules, type, date, slot);
-            const members = sd.members || [];
-            const pending = sd.pendingRequests || [];
-            const isFull = members.length >= max;
-            const isMine = !user?.isAdmin && !!members.find(m => m.nick === user?.nick);
-            const isPending = !user?.isAdmin && !!pending.find(m => m.nick === user?.nick);
-            const isLeader = !user?.isAdmin && !!members.find(m => m.nick === user?.nick && m.isLeader);
-            const leader = members.find(m => m.isLeader);
-            const partyNum = idx + 1;
-            return (
-              <div key={slot} onClick={() => {
-                setSlotModal({type, date, slot});
-                setEditingNotice(false); setClassEditing(false);
-                setNoticeEdit(sd.notice || "");
-              }} style={{
-                background: isMine?"rgba(109,74,255,.12)":isFull?"rgba(239,68,68,.06)":"#111120",
-                border:`1px solid ${isMine?"#6d4aff":isFull?"#5a1515":"#1e1e30"}`,
-                borderRadius:16, padding:18, cursor:"pointer", transition:"all .2s"
-              }}
-              onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,.5)";}}
-              onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="none";}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                    <span style={{background:"rgba(109,74,255,.25)",border:"1px solid #6d4aff",color:"#c4b5fd",fontSize:14,padding:"3px 14px",borderRadius:20,fontWeight:900}}>{partyNum}파티</span>
-                    <span style={{background:isFull?"rgba(239,68,68,.15)":"rgba(34,197,94,.1)",border:`1px solid ${isFull?"#ef4444":"#22c55e"}`,color:isFull?"#ef4444":"#22c55e",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:700}}>
-                      {members.length===0?"비어있음":isFull?"🔴 마감":"🟢 모집중"}
-                    </span>
-                    {isMine && <span style={{fontSize:10,color:"#a78bfa",fontWeight:700}}>✓ 참석중</span>}
-                    {isPending && <span style={{fontSize:10,color:"#fbbf24",fontWeight:700}}>⏳ 신청중</span>}
-                    {(pending.length > 0 && isLeader) && <span style={{background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",color:"#fbbf24",fontSize:10,padding:"2px 8px",borderRadius:20}}>신청 {pending.length}명</span>}
-                  </div>
-                  <span style={{fontSize:12,color:"#444",fontWeight:600}}>{members.length}/{max}</span>
-                </div>
-                {leader ? (
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                    <span style={{fontSize:14}}>👑</span>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <span style={{fontWeight:700,color:"#fbbf24",fontSize:13}}>{leader.nick}</span>
-                        {leader.job && <span style={{fontSize:11,color:"#555"}}>{leader.job}</span>}
-                      </div>
-                      {(() => { const u=users.find(u=>u.nick===leader.nick); return u?.atul?<span style={{fontSize:10,color:"#a78bfa"}}>아툴 {u.atul}</span>:null; })()}
+        {daySlots.length === 0 ? (
+          <div style={{textAlign:"center",padding:60,color:"#2a2a3a",fontSize:14}}>
+            아직 생성된 파티가 없습니다.<br/>
+            <span style={{fontSize:12,color:"#1e1e30"}}>위의 [방 생성] 버튼으로 파티를 만드세요.</span>
+          </div>
+        ) : (
+          <div className="mobile-grid-1" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
+            {daySlots.map(([slot, sd]) => {
+              const members = sd.members || [];
+              const isFull = members.length >= max;
+              const isMine = amIIn(type, date, slot);
+              const leader = members.find(m => m.isLeader);
+              const partyNum = slot.replace("party-", "");
+              return (
+                <div key={slot} onClick={() => {
+                  setSlotModal({type, date, slot});
+                  setEditingNotice(false); setClassEditing(false);
+                  setNoticeEdit(sd.notice || "");
+                }} style={{
+                  background: isMine?"rgba(109,74,255,.12)":isFull?"rgba(239,68,68,.06)":"#111120",
+                  border:`1px solid ${isMine?"#6d4aff":isFull?"#5a1515":"#1e1e30"}`,
+                  borderRadius:16, padding:18, cursor:"pointer", transition:"all .2s"
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,.5)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{background:"rgba(109,74,255,.25)",border:"1px solid #6d4aff",color:"#c4b5fd",fontSize:14,padding:"3px 14px",borderRadius:20,fontWeight:900}}>{partyNum}포스</span>
+                      <span style={{background:isFull?"rgba(239,68,68,.15)":"rgba(34,197,94,.1)",border:`1px solid ${isFull?"#ef4444":"#22c55e"}`,color:isFull?"#ef4444":"#22c55e",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:700}}>
+                        {isFull?"🔴 마감":"🟢 모집중"}
+                      </span>
+                      {isMine && <span style={{fontSize:10,color:"#a78bfa",fontWeight:700}}>✓ 참석중</span>}
                     </div>
+                    <span style={{fontSize:12,color:"#444",fontWeight:600}}>{members.length}/{max}</span>
                   </div>
-                ) : (
-                  <div style={{color:"#2a2a3a",fontSize:12,fontStyle:"italic",marginBottom:10}}>방장 없음 — 첫 참가자가 방장</div>
-                )}
-                {sd.notice && <div style={{background:"rgba(251,191,36,.06)",border:"1px solid rgba(251,191,36,.2)",borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:12,color:"#e2d9f3"}}>📌 {sd.notice}</div>}
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {members.map(m => {
-                    const u=users.find(u=>u.nick===m.nick);
-                    return (
-                      <div key={m.nick} style={{background:m.isLeader?"rgba(251,191,36,.1)":"#0a0a14",border:`1px solid ${m.isLeader?"rgba(251,191,36,.3)":"#1e1e30"}`,borderRadius:12,padding:"6px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:80}}>
-                        <span style={{color:m.isLeader?"#fbbf24":"#e2d9f3",fontSize:13,fontWeight:700}}>{m.nick}</span>
-                        {m.job && <span style={{color:CLASS_COLORS[m.job]||"#555",fontSize:11}}>{m.job}</span>}
-                        {u?.atul && <span style={{color:"#a78bfa",fontSize:11,fontWeight:600}}>아툴 {u.atul}</span>}
+                  {leader ? (
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <span style={{fontSize:14}}>👑</span>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontWeight:700,color:"#fbbf24",fontSize:13}}>{leader.nick}</span>
+                          {leader.job && <span style={{fontSize:11,color:"#555"}}>{leader.job}</span>}
+                        </div>
+                        {(() => { const u=users.find(u=>u.nick===leader.nick); return (!leader.isExternal && u?.atul)?<span style={{fontSize:10,color:"#a78bfa"}}>아툴 {u.atul}</span>:null; })()}
                       </div>
-                    );
-                  })}
-                  {members.length===0 && <span style={{color:"#2a2a3a",fontSize:12,fontStyle:"italic"}}>아직 참가자 없음</span>}
+                    </div>
+                  ) : (
+                    <div style={{color:"#2a2a3a",fontSize:12,fontStyle:"italic",marginBottom:10}}>방장 없음</div>
+                  )}
+                  {sd.notice && <div style={{background:"rgba(251,191,36,.06)",border:"1px solid rgba(251,191,36,.2)",borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:12,color:"#e2d9f3"}}>📌 {sd.notice}</div>}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {members.map(m => {
+                      const u=users.find(u=>u.nick===m.nick);
+                      return (
+                        <div key={m.nick} style={{background:m.isLeader?"rgba(251,191,36,.1)":"#0a0a14",border:`1px solid ${m.isLeader?"rgba(251,191,36,.3)":"#1e1e30"}`,borderRadius:12,padding:"6px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:80}}>
+                          <span style={{color:m.isLeader?"#fbbf24":"#e2d9f3",fontSize:13,fontWeight:700}}>{m.nick}</span>
+                          {m.job && <span style={{color:CLASS_COLORS[m.job]||"#555",fontSize:11}}>{m.job}</span>}
+                          {!m.isExternal && u?.atul && <span style={{color:"#a78bfa",fontSize:11,fontWeight:600}}>아툴 {u.atul}</span>}
+                          {m.isExternal && <span style={{fontSize:9,color:"#888",fontWeight:600}}>(외부)</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -628,45 +667,79 @@ export default function App() {
           })}
         </div>
 
-        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(115px,1fr))", gap:8}}>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:8}}>
           {SLOTS.map(slot => {
-            const sd = getSlotData(schedules, type, selectedDate, slot);
-            const members = sd.members || [];
             const past = isSlotPast(selectedDate, slot);
-            const isFull = members.length >= max || past;
-            const isMine = amIIn(type, selectedDate, slot);
-            const isPending = amIPending(type, selectedDate, slot);
-            const hasNotice = !!sd.notice;
-            const hasPending = (sd.pendingRequests?.length || 0) > 0 && amILeader(type, selectedDate, slot);
+            // 해당 시간대의 모든 파티 키 수집
+            const partiesAtTime = Object.entries(schedules[type]?.[selectedDate] || {})
+              .filter(([k, sd]) => getBaseSlot(k) === slot && sd.members?.length > 0)
+              .sort(([a], [b]) => a.localeCompare(b));
+            const iAmInAny = partiesAtTime.some(([k]) => amIIn(type, selectedDate, k));
+            const hasParties = partiesAtTime.length > 0;
 
-            let bg = "#0d0d18", border = "#1a1a28", timeColor = "#3a3a5a";
-            if (past) { bg = "#0a0a0a"; border = "#1a1a1a"; timeColor = "#2a2a2a"; }
-            else if (isMine) { bg = "rgba(109,74,255,.15)"; border = "#6d4aff"; timeColor = "#a78bfa"; }
-            else if (isPending) { bg = "rgba(251,191,36,.08)"; border = "#92400e"; timeColor = "#fbbf24"; }
-            else if (members.length >= max) { bg = "rgba(239,68,68,.08)"; border = "#5a1515"; timeColor = "#ef4444"; }
-            else if (members.length > 0) { bg = "rgba(109,74,255,.08)"; border = "#2d2a4a"; timeColor = "#6d4aff"; }
+            let borderColor = "#1a1a28", bg = "#0d0d18";
+            if (past) { bg = "#0a0a0a"; borderColor = "#1a1a1a"; }
+            else if (iAmInAny) { bg = "rgba(109,74,255,.12)"; borderColor = "#6d4aff"; }
+            else if (hasParties) { bg = "rgba(109,74,255,.06)"; borderColor = "#2d2a4a"; }
 
             return (
-              <div key={slot} onClick={() => {
-                setSlotModal({type, date:selectedDate, slot});
-                setEditingNotice(false); setClassEditing(false);
-                setNoticeEdit(sd.notice || "");
-              }} style={{
-                padding:"10px 12px", borderRadius:12, cursor: past ? "default" : "pointer",
-                border:`1px solid ${border}`, background:bg, transition:"all .15s", position:"relative",
-                opacity: past ? 0.4 : 1
-              }}
-              onMouseEnter={e => { if(!past){e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,.5)";} }}
-              onMouseLeave={e => { e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="none"; }}>
-                {hasNotice && <span style={{position:"absolute",top:5,right:8,fontSize:9}}>📌</span>}
-                {hasPending && <span style={{position:"absolute",top:5,left:8,fontSize:9,color:"#fbbf24"}}>!</span>}
-                <div style={{fontSize:14, fontWeight:700, color:timeColor, marginBottom:4, letterSpacing:.5}}>{slot}</div>
-                <div style={{fontSize:11, color:"#444", marginBottom:3}}>{members.length}/{max}명</div>
-                <div style={{fontSize:10, fontWeight:700, color: past?"#2a2a3a":isFull?"#ef4444":members.length>0?"#22c55e":"#2a2a3a"}}>
-                  {past ? "⏱ 종료" : members.length===0 ? "─" : isFull ? "🔴 마감" : "🟢 모집중"}
+              <div key={slot} style={{
+                padding:"8px 8px 8px", borderRadius:12, border:`1px solid ${borderColor}`, background:bg,
+                transition:"all .15s", position:"relative", opacity: past ? 0.5 : 1,
+                display:"flex", flexDirection:"column", gap:5
+              }}>
+                {/* 시간 헤더 */}
+                <div style={{fontSize:13, fontWeight:700, color: past?"#2a2a2a":iAmInAny?"#a78bfa":hasParties?"#6d4aff":"#3a3a5a", letterSpacing:.5, textAlign:"center", paddingBottom:3, borderBottom:"1px solid #1a1a28"}}>
+                  {slot}
                 </div>
-                {isMine && !past && <div style={{fontSize:9,color:"#a78bfa",marginTop:3,fontWeight:600}}>✓ 참석예정</div>}
-                {isPending && !past && <div style={{fontSize:9,color:"#fbbf24",marginTop:3,fontWeight:600}}>⏳ 신청중</div>}
+
+                {/* 파티 카드들 */}
+                {partiesAtTime.map(([partyKey, sd], idx) => {
+                  const leader = sd.members.find(m => m.isLeader);
+                  const isMine = amIIn(type, selectedDate, partyKey);
+                  const isFull = sd.members.length >= max;
+                  return (
+                    <div key={partyKey} onClick={() => {
+                      setSlotModal({type, date:selectedDate, slot:partyKey});
+                      setEditingNotice(false); setClassEditing(false);
+                      setNoticeEdit(sd.notice || "");
+                    }} style={{
+                      background: isMine?"rgba(109,74,255,.22)":isFull?"rgba(239,68,68,.1)":"rgba(255,255,255,.04)",
+                      border:`1px solid ${isMine?"#6d4aff":isFull?"#5a1515":"#2a2a3a"}`,
+                      borderRadius:8, padding:"5px 7px", cursor:"pointer", transition:"all .15s"
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.4)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="none";}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontSize:9,color:"#666",fontWeight:700}}>
+                          {partiesAtTime.length > 1 ? `${idx+1}번` : "1번"}
+                        </span>
+                        <span style={{fontSize:9,color:isFull?"#ef4444":"#22c55e",fontWeight:700}}>
+                          {sd.members.length}/{max}
+                        </span>
+                      </div>
+                      {leader && (
+                        <div style={{fontSize:10,fontWeight:700,color:isMine?"#c4b5fd":"#888",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          👑 {leader.nick}
+                        </div>
+                      )}
+                      {isMine && <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>✓ 참석예정</div>}
+                    </div>
+                  );
+                })}
+
+                {/* 방 생성 버튼 */}
+                {!past && (
+                  <button onClick={() => handleRequestJoin(type, selectedDate, slot)}
+                    style={{width:"100%",padding:"5px 0",borderRadius:8,border:"1px dashed #2a2a3a",background:"transparent",color:"#3a3a5a",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,transition:"all .2s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor="#6d4aff";e.currentTarget.style.color="#a78bfa";e.currentTarget.style.background="rgba(109,74,255,.08)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor="#2a2a3a";e.currentTarget.style.color="#3a3a5a";e.currentTarget.style.background="transparent";}}>
+                    🏠 방 생성
+                  </button>
+                )}
+                {past && partiesAtTime.length === 0 && (
+                  <div style={{fontSize:9,color:"#2a2a2a",textAlign:"center",paddingBottom:2}}>⏱ 종료</div>
+                )}
               </div>
             );
           })}
@@ -684,29 +757,29 @@ export default function App() {
     const required = sd.requiredClasses || [];
     const max = maxOf(type);
     const isFull = members.length >= max;
-    const past = !slot?.startsWith("party-") && isSlotPast(date, slot);
+    const past = !slot?.startsWith("party-") && isSlotPast(date, getBaseSlot(slot));
     const isMine = amIIn(type, date, slot);
-    const isPending = amIPending(type, date, slot);
-    const isLeader = amILeader(type, date, slot);
+    const isPending = amIPending();
+    const isLeader = amILeader(type, date, slot) || !!(user?.isAdmin);
     const dObj = DATE_RANGE.find(d => fmtDate(d) === date);
     const {short, wd} = dObj ? fmtLabel(dObj) : {short:date, wd:""};
     const isPartySlot = slot?.startsWith("party-");
-    const slotLabel = isPartySlot ? `${slot.replace("party-","")}포스` : slot;
-
-    const myJobAllowed = !user?.isAdmin && required.length > 0
-      ? (user?.job ? required.includes(user.job) : true)
-      : true;
+    const slotLabel = isPartySlot
+      ? `${slot.replace("party-","")}포스`
+      : slot.includes('#')
+        ? `${getBaseSlot(slot)} · ${slot.split('#')[1]}번 파티`
+        : slot;
 
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}
-        onClick={e => { if(e.target===e.currentTarget){setSlotModal(null);setEditingNotice(false);setClassEditing(false);} }}>
+        onClick={e => { if(e.target===e.currentTarget){setSlotModal(null);setEditingNotice(false);setClassEditing(false);setExternalForm(null);} }}>
         <div className="mobile-modal" style={{background:"#111120",border:"1px solid #2a2a3a",borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto"}}>
 
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
             <div>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <div style={{background: past?"#1a1a1a":"linear-gradient(135deg,#6d4aff,#a78bfa)",borderRadius:10,padding:"6px 14px",fontSize:16,fontWeight:900,color:"#fff",letterSpacing:1}}>{slotLabel}</div>
-                <span style={{color:"#666",fontSize:13}}>{isPartySlot ? "" : `${short} (${wd})`}{!isPartySlot && ""}{isPartySlot ? `${short} (${wd})` : ""}</span>
+                <span style={{color:"#666",fontSize:13}}>{`${short} (${wd})`}</span>
                 {past && <span style={{background:"#1a1a1a",border:"1px solid #333",color:"#555",fontSize:10,padding:"2px 8px",borderRadius:20}}>종료됨</span>}
               </div>
               <div style={{marginTop:6,display:"flex",gap:10,alignItems:"center"}}>
@@ -716,7 +789,7 @@ export default function App() {
                 </span>
               </div>
             </div>
-            <button onClick={()=>{setSlotModal(null);setEditingNotice(false);setClassEditing(false);}}
+            <button onClick={()=>{setSlotModal(null);setEditingNotice(false);setClassEditing(false);setExternalForm(null);}}
               style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>✕</button>
           </div>
 
@@ -789,45 +862,20 @@ export default function App() {
                     {Array.from({length:partyCount}).map((_,idx) => {
                       const nonLeaders = members.filter(m => !m.isLeader);
                       const m = nonLeaders[idx];
-                      const slotRequired = !isPartySlot ? ((sd.requiredClasses||[])[idx] || null) : null;
                       return (
                         <div key={idx} style={{
-                          borderRadius:12,border:`1px solid ${m ? "#2a2a3a" : isLeader && slotRequired ? CLASS_COLORS[slotRequired]+"55" : "#1a1a24"}`,
-                          background: m ? "#0d0d18" : isLeader && slotRequired ? CLASS_COLORS[slotRequired]+"0d" : "#0a0a10",
+                          borderRadius:12,border:`1px solid ${m ? "#2a2a3a" : "#1a1a24"}`,
+                          background: m ? "#0d0d18" : "#0a0a10",
                           padding:isPartySlot?"8px 6px":"12px 10px",position:"relative",minHeight:isPartySlot?68:88,
                           display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4
                         }}>
                           <span style={{position:"absolute",top:5,left:8,fontSize:9,color:"#333",fontWeight:700}}>#{idx+1}</span>
-
-                          {!isPartySlot && isLeader && !m && (
-                            <div style={{position:"absolute",top:4,right:4}}>
-                              <select
-                                value={slotRequired||""}
-                                onChange={e => {
-                                  const sd2 = JSON.parse(JSON.stringify(schedules));
-                                  if (!sd2[type]?.[date]?.[slot]) return;
-                                  const req = [...(sd2[type][date][slot].requiredClasses||[])];
-                                  while(req.length < 7) req.push(null);
-                                  req[idx] = e.target.value || null;
-                                  sd2[type][date][slot].requiredClasses = req.filter((_,i)=>i<=idx||req[i]);
-                                  sd2[type][date][slot].requiredClasses = Array.from({length:7},(_,i)=>req[i]||null);
-                                  setSchedules({...sd2}); persist(users, sd2);
-                                }}
-                                style={{fontSize:9,background:"#0a0a14",border:"1px solid #2a2a3a",borderRadius:6,color:"#666",cursor:"pointer",padding:"1px 2px",maxWidth:56}}
-                                onClick={e=>e.stopPropagation()}
-                              >
-                                <option value="">자유</option>
-                                {CLASSES.map(c=><option key={c} value={c}>{renderClassIcon(c,16)} {c}</option>)}
-                              </select>
-                            </div>
-                          )}
-
                           {m ? (
                             <>
                               <div style={{fontSize:isPartySlot?16:22}}>{renderClassIcon(m.job, isPartySlot?20:28)}</div>
                               <div style={{fontSize:isPartySlot?10:12,fontWeight:700,color:"#e2d9f3",textAlign:"center",lineHeight:1.3}}>{m.nick}</div>
-                              {m.job && <div style={{fontSize:9,color:CLASS_COLORS[m.job]||"#555",fontWeight:600}}>{m.job}</div>}
-                              {(() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>아툴 {uInfo.atul}</div> : null; })()}
+                              {m.job && <div style={{fontSize:9,color:CLASS_COLORS[m.job]||"#555",fontWeight:600}}>{m.isExternal?`${m.job} (외)`:m.job}</div>}
+                              {!m.isExternal && (() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>아툴 {uInfo.atul}</div> : null; })()}
                               {m.nick===user?.nick && (
                                 <span style={{fontSize:9,background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",padding:"1px 5px",borderRadius:10}}>나</span>
                               )}
@@ -838,18 +886,8 @@ export default function App() {
                             </>
                           ) : (
                             <>
-                              {slotRequired ? (
-                                <>
-                                  <div style={{fontSize:22,opacity:0.4}}>{renderClassIcon(slotRequired,28)}</div>
-                                  <div style={{fontSize:10,color:CLASS_COLORS[slotRequired],fontWeight:700}}>{slotRequired}</div>
-                                  <div style={{fontSize:9,color:"#333"}}>모집중</div>
-                                </>
-                              ) : (
-                                <>
-                                  <div style={{fontSize:isPartySlot?16:20,opacity:0.15}}>＋</div>
-                                  <div style={{fontSize:isPartySlot?9:10,color:"#2a2a3a"}}>빈 자리</div>
-                                </>
-                              )}
+                              <div style={{fontSize:isPartySlot?16:20,opacity:0.15}}>＋</div>
+                              <div style={{fontSize:isPartySlot?9:10,color:"#2a2a3a"}}>빈 자리</div>
                             </>
                           )}
                         </div>
@@ -859,25 +897,6 @@ export default function App() {
                 </>
               );
             })()}
-
-            {isLeader && pending.length > 0 && (
-              <div style={{background:"rgba(251,191,36,.06)",border:"1px solid rgba(251,191,36,.25)",borderRadius:12,padding:14,marginTop:12}}>
-                <p style={{fontSize:12,color:"#fbbf24",fontWeight:700,marginBottom:10}}>⏳ 참가 신청 대기 ({pending.length}명)</p>
-                {pending.map(m => (
-                  <div key={m.nick} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid rgba(251,191,36,.1)"}}>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span style={{fontWeight:600,color:"#e2d9f3"}}>{m.nick}</span>
-                        {m.job && <span style={{fontSize:11,color:CLASS_COLORS[m.job]||"#555"}}>{renderClassIcon(m.job,14)} {m.job}</span>}
-                        {(() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <span style={{fontSize:10,color:"#a78bfa"}}>아툴 {uInfo.atul}</span> : null; })()}
-                      </div>
-                    </div>
-                    <button onClick={()=>handleApprove(type,date,slot,m.nick)} style={{background:"rgba(34,197,94,.2)",border:"1px solid #22c55e",color:"#22c55e",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>수락</button>
-                    <button onClick={()=>handleReject(type,date,slot,m.nick)} style={{background:"rgba(239,68,68,.15)",border:"1px solid #ef4444",color:"#ef4444",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11}}>거절</button>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {isLeader && !past && (
               <div style={{background:"#0a0a14",border:"1px solid #1e1e30",borderRadius:12,padding:12,marginTop:14}}>
@@ -959,21 +978,39 @@ export default function App() {
             )}
           </div>
 
-          <div className="mobile-col" style={{display:"flex",gap:8}}>
-            {!isMine && !isPending && !isFull && (
-              myJobAllowed ? (
-                <button onClick={()=>handleRequestJoin(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
-                  {members.length===0 ? "🏠 방 생성" : "📨 참가 신청"}
-                </button>
-              ) : (
-                <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>
-                  ⛔ {user?.job} 참가 불가 클래스
+          {/* 레기온외 인원 추가 폼 */}
+          {isLeader && !past && (
+            <div style={{marginBottom:12}}>
+              {externalForm ? (
+                <div style={{background:"#0a0a14",border:"1px solid #2a2a3a",borderRadius:12,padding:12}}>
+                  <p style={{fontSize:11,color:"#a78bfa",fontWeight:700,marginBottom:8}}>➕ 레기온외 인원 추가</p>
+                  <div style={{display:"flex",gap:8,marginBottom:8}}>
+                    <input value={externalForm.nick} onChange={e=>setExternalForm({...externalForm,nick:e.target.value})}
+                      placeholder="이름" style={{flex:2,padding:"8px 10px",background:"#111120",border:"1px solid #2a2a3a",borderRadius:8,color:"#e2d9f3",fontFamily:"inherit",fontSize:12,outline:"none"}}
+                      onFocus={e=>e.target.style.borderColor="#6d4aff"} onBlur={e=>e.target.style.borderColor="#2a2a3a"}/>
+                    <input value={externalForm.job} onChange={e=>setExternalForm({...externalForm,job:e.target.value})}
+                      placeholder="클래스" style={{flex:1,padding:"8px 10px",background:"#111120",border:"1px solid #2a2a3a",borderRadius:8,color:"#e2d9f3",fontFamily:"inherit",fontSize:12,outline:"none"}}
+                      onFocus={e=>e.target.style.borderColor="#6d4aff"} onBlur={e=>e.target.style.borderColor="#2a2a3a"}/>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setExternalForm(null)} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>취소</button>
+                    <button onClick={()=>handleAddExternal(type,date,slot)} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#6d4aff",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>추가</button>
+                  </div>
                 </div>
-              )
-            )}
-            {isPending && (
-              <button onClick={()=>handleLeave(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"1px solid #92400e",background:"rgba(146,64,14,.2)",color:"#fbbf24",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                ✕ 신청 취소
+              ) : (
+                <button onClick={()=>setExternalForm({nick:"",job:""})} style={{width:"100%",padding:"10px",borderRadius:10,border:"1px dashed #2a2a3a",background:"transparent",color:"#555",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all .2s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#6d4aff";e.currentTarget.style.color="#a78bfa";}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor="#2a2a3a";e.currentTarget.style.color="#555";}}>
+                  ➕ 레기온외 인원 추가
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="mobile-col" style={{display:"flex",gap:8}}>
+            {!isMine && !isFull && !past && (
+              <button onClick={()=>handleRequestJoin(type,date,slot)} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d4aff,#a78bfa)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(109,74,255,.4)"}}>
+                🏠 방 생성
               </button>
             )}
             {isMine && (
@@ -986,7 +1023,12 @@ export default function App() {
                 </button>
               </>
             )}
-            {isFull && !isMine && !isPending && (
+            {!isMine && user?.isAdmin && members.length > 0 && (
+              <button onClick={()=>setNamedGroupModal({type,date,slot})} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#15803d,#22c55e)",color:"#fff",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(34,197,94,.35)"}}>
+                🎯 파티분배
+              </button>
+            )}
+            {isFull && !isMine && (
               <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>🔴 마감된 시간대입니다</div>
             )}
           </div>
@@ -1134,7 +1176,7 @@ export default function App() {
               <div style={{background:"rgba(109,74,255,.08)",border:"1px solid #6d4aff",borderRadius:14,padding:16,marginBottom:16}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <span style={{fontSize:13,color:"#a78bfa",fontWeight:700}}>
-                    📥 {adminAddTarget.slot} 에 유저 추가
+                    📥 {adminAddTarget.slot.startsWith("party-") ? `${adminAddTarget.slot.replace("party-","")}포스` : adminAddTarget.slot.includes('#') ? `${getBaseSlot(adminAddTarget.slot)} · ${adminAddTarget.slot.split('#')[1]}번` : adminAddTarget.slot} 에 유저 추가
                   </span>
                   <button onClick={()=>{setAdminAddTarget(null);setAdminSearchQuery("");}} style={{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:14}}>✕</button>
                 </div>
@@ -1174,7 +1216,7 @@ export default function App() {
                   const dayData = Object.entries(schedules[type]?.[ds]||{}).filter(([slot,sd])=>{
                     if(!sd.members?.length) return false;
                     if(type==="추가") return ds>=TODAY_STR; // 추가모집: 오늘 이전 날짜 숨김
-                    return !isSlotPast(ds,slot);            // 성역/성역2: 지난 시간 슬롯 숨김
+                    return !isSlotPast(ds, getBaseSlot(slot)); // 성역/성역2: 지난 시간 슬롯 숨김
                   }).sort();
                   if (dayData.length===0) return null;
                   return (
@@ -1183,22 +1225,27 @@ export default function App() {
                         <span style={{color:"#555",fontWeight:600}}>{short} {wd}요일</span>
                         {ds===TODAY_STR&&<span style={{background:"rgba(109,74,255,.2)",color:"#a78bfa",fontSize:10,padding:"1px 6px",borderRadius:20}}>오늘</span>}
                       </div>
-                      {dayData.map(([slot, sd]) => (
+                      {dayData.map(([slot, sd]) => {
+                        const displaySlot = slot.startsWith("party-")
+                          ? `${slot.replace("party-","")}포스`
+                          : slot.includes('#')
+                            ? `${getBaseSlot(slot)} · ${slot.split('#')[1]}번`
+                            : slot;
+                        return (
                         <div key={slot} style={{background:"#0d0d18",border:"1px solid #1e1e30",borderRadius:12,padding:"12px 16px",marginBottom:8}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                             <div style={{display:"flex",alignItems:"center",gap:10}}>
-                              <span style={{fontWeight:700,color:"#c4b5fd",fontSize:14}}>{slot}</span>
+                              <span style={{fontWeight:700,color:"#c4b5fd",fontSize:14}}>{displaySlot}</span>
                               <span style={{fontSize:12,color:sd.members.length>=maxOf(type)?"#ef4444":"#22c55e",fontWeight:600}}>
                                 {sd.members.length}/{maxOf(type)} {sd.members.length>=maxOf(type)?"마감":"모집중"}
                               </span>
-                              {(sd.pendingRequests?.length||0)>0&&<span style={{background:"rgba(251,191,36,.15)",color:"#fbbf24",fontSize:10,padding:"1px 8px",borderRadius:20}}>대기 {sd.pendingRequests.length}명</span>}
                             </div>
                             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                               <button onClick={()=>{setAdminAddTarget({type,date:ds,slot});setAdminSearchQuery("");setAdminView("schedule");}}
                                 style={{background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>+ 추가</button>
                               <button onClick={()=>setNamedGroupModal({type,date:ds,slot})}
                                 style={{background:"rgba(34,197,94,.12)",border:"1px solid rgba(34,197,94,.4)",color:"#4ade80",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>🏠 파티분배</button>
-                              <button onClick={()=>{ if(window.confirm(`${slot} 전체 강퇴?`)) handleAdminClearSlot(type,ds,slot); }}
+                              <button onClick={()=>{ if(window.confirm(`${displaySlot} 전체 강퇴?`)) handleAdminClearSlot(type,ds,slot); }}
                                 style={{background:"rgba(127,29,29,.3)",border:"1px solid #7f1d1d",color:"#fca5a5",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11}}>전체강퇴</button>
                             </div>
                           </div>
@@ -1225,7 +1272,8 @@ export default function App() {
                             })}
                           </div>
                         </div>
-                      ))}
+                      );
+                      })}
                     </div>
                   );
                 })}
@@ -1318,10 +1366,12 @@ export default function App() {
                         {dayData.map(([slot, sd]) => {
                           const members = sd.members || [];
                           const leader = members.find(m => m.isLeader);
-                          // party-N → N포스 변환
+                          // party-N → N포스, "20:00#2" → "20:00 (2번)" 변환
                           const dispSlot = slot.startsWith("party-")
                             ? `${slot.replace("party-","")}포스`
-                            : slot;
+                            : slot.includes('#')
+                              ? `${getBaseSlot(slot)} (${slot.split('#')[1]}번)`
+                              : slot;
                           const rawGroups = sd.namedGroups || {};
                           // 추가모집: party1~4 키, 성역류: group1~2 키
                           const displayGroups = isExtra
@@ -1338,16 +1388,16 @@ export default function App() {
                           const byNick = Object.fromEntries(members.map(m => [m.nick, m]));
                           const grouped = new Set(displayGroups.flatMap(g => g.nicks));
                           const unassigned = members.filter(m => !grouped.has(m.nick));
-                          const isPast = !isExtra && !slot.startsWith("party-") ? isSlotPast(ds, slot) : false;
+                          const isPast = !isExtra && !slot.startsWith("party-") ? isSlotPast(ds, getBaseSlot(slot)) : false;
 
-                          // 대시보드 사용자 목록: 아이디 / 직업만 렌더링되도록 수정 (글자 크기 축소)
+                          // 대시보드 사용자 목록: 아이디 / 직업만 렌더링 (외부 인원은 이름+클래스만 표시)
                           const renderPerson = (m) => {
                             if (!m) return null;
                             return (
                               <div key={m.nick} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
                                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                                   {m.isLeader && <span style={{color:"#fbbf24",fontSize:12}}>👑</span>}
-                                  <span className="share-nick" style={{color:m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:500,fontSize:13}}>{m.nick}</span>
+                                  <span className="share-nick" style={{color:m.isExternal?"#9ca3af":m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:500,fontSize:13}}>{m.nick}{m.isExternal?" (외)":""}</span>
                                 </div>
                                 {m.job && <span style={{color:CLASS_COLORS[m.job]||"#9ca3af",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>{m.job}</span>}
                               </div>
@@ -1707,6 +1757,7 @@ export default function App() {
           AION_LOGO={AION_LOGO}
           raidNames={raidNames}
           onLogout={() => {
+            localStorage.removeItem('kina_session');
             setScreen("login");
             setUser(null);
             setCodeInput("");
@@ -1727,53 +1778,6 @@ export default function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <h3 style={{fontSize:16,fontWeight:700,color:"#c4b5fd"}}>🏠 파티 생성</h3>
               <button onClick={()=>setExtraDraft(null)} style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"5px 11px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
-            </div>
-
-            <div style={{marginBottom:18}}>
-              <p style={{fontSize:12,color:"#a78bfa",fontWeight:700,marginBottom:6}}>🎭 모집 클래스 지정 (선택사항)</p>
-              <p style={{fontSize:11,color:"#444",marginBottom:10}}>각 자리에 원하는 클래스를 지정하세요. 지정하지 않은 자리는 모든 클래스 신청 가능합니다.</p>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
-                {CLASSES.map(c => {
-                  const cnt = (extraDraft.requiredClasses||[]).filter(x=>x===c).length;
-                  return (
-                    <button key={c} onClick={()=>{
-                      const req = [...(extraDraft.requiredClasses||[])];
-                      if(req.length < 7) req.push(c);
-                      else showToast("최대 7자리까지 지정 가능합니다.","#eab308");
-                      setExtraDraft({...extraDraft, requiredClasses:req});
-                    }} style={{
-                      padding:"7px 4px",borderRadius:10,border:`1px solid ${CLASS_COLORS[c]}55`,
-                      background:cnt>0?CLASS_COLORS[c]+"22":"transparent",
-                      color:cnt>0?CLASS_COLORS[c]:"#444",fontSize:11,cursor:"pointer",fontFamily:"inherit",
-                      fontWeight:cnt>0?700:400,textAlign:"center",transition:"all .2s",position:"relative"
-                    }}>
-                      <div style={{fontSize:16}}>{renderClassIcon(c,20)}</div>
-                      <div style={{fontSize:10}}>{c}</div>
-                      {cnt>0&&<span style={{position:"absolute",top:2,right:4,fontSize:9,color:CLASS_COLORS[c],fontWeight:900}}>{cnt}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {(extraDraft.requiredClasses||[]).length > 0 && (
-                <div style={{background:"#0a0a14",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                    <span style={{fontSize:11,color:"#555"}}>지정된 자리 ({extraDraft.requiredClasses.length}/7)</span>
-                    <button onClick={()=>setExtraDraft({...extraDraft,requiredClasses:[]})} style={{fontSize:10,color:"#ef4444",background:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit"}}>전체 초기화</button>
-                  </div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {extraDraft.requiredClasses.map((c,i)=>(
-                      <span key={i} onClick={()=>{
-                        const req=[...extraDraft.requiredClasses];
-                        req.splice(i,1);
-                        setExtraDraft({...extraDraft,requiredClasses:req});
-                      }} style={{background:CLASS_COLORS[c]+"22",border:`1px solid ${CLASS_COLORS[c]}55`,color:CLASS_COLORS[c],padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600,cursor:"pointer"}}>
-                        {renderClassIcon(c,14)} {c} ✕
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div style={{marginBottom:18}}>
@@ -1809,8 +1813,8 @@ export default function App() {
             <div style={{fontSize:44,marginBottom:16}}>⚠️</div>
             <h3 style={{color:"#fbbf24",fontSize:18,fontWeight:700,marginBottom:12}}>시간대 변경</h3>
             <p style={{color:"#888",fontSize:14,lineHeight:1.7,marginBottom:24}}>
-              이미 <strong style={{color:"#c4b5fd"}}>{moveModal.fromType&&moveModal.fromType!==moveModal.type?`[${moveModal.fromType}] `:""}{moveModal.fromDate!==selectedDate?moveModal.fromDate+" ":""}{moveModal.fromSlot}</strong>에<br/>등록되어 있습니다.<br/>
-              <strong style={{color:"#a78bfa"}}>{moveModal.toDate!==selectedDate?moveModal.toDate+" ":""}{moveModal.toSlot}</strong>으로 이동할까요?
+              이미 <strong style={{color:"#c4b5fd"}}>{moveModal.fromType&&moveModal.fromType!==moveModal.type?`[${moveModal.fromType}] `:""}{moveModal.fromDate!==selectedDate?moveModal.fromDate+" ":""}{getBaseSlot(moveModal.fromSlot)}</strong>에<br/>등록되어 있습니다.<br/>
+              <strong style={{color:"#a78bfa"}}>{moveModal.toDate!==selectedDate?moveModal.toDate+" ":""}{getBaseSlot(moveModal.toSlot)}</strong>으로 이동할까요?
             </p>
             <div className="mobile-col" style={{display:"flex",gap:8}}>
               <button onClick={()=>setMoveModal(null)} style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
