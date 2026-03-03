@@ -24,6 +24,24 @@ jobs:
       - name: 3. 패키지 설치
         run: npm install
 
+      - name: 3.5. 대상 사이트 접속 테스트
+        run: |
+          echo "=== 현재 서버 IP ==="
+          curl -s https://api.ipify.org
+          echo ""
+          echo "=== 대상 사이트 HTTP 응답 코드 ==="
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            "https://www.aion2tool.com/region/%EB%B0%94%EB%B0%94%EB%A3%BD/%ED%82%A4%EB%82%98")
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ 사이트 접속 정상"
+          elif [ "$STATUS" = "403" ] || [ "$STATUS" = "429" ] || [ "$STATUS" = "503" ]; then
+            echo "🚫 사이트 접속 차단됨 (차단 코드: $STATUS)"
+          else
+            echo "⚠️ 예상치 못한 응답: $STATUS"
+          fi
+
       - name: 4. 크롤러 실행 (Firebase 직접 저장)
         run: node crawler.js
         env:
@@ -33,6 +51,14 @@ jobs:
           FIREBASE_STORAGE_BUCKET:      ${{ secrets.FIREBASE_STORAGE_BUCKET }}
           FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
           FIREBASE_APP_ID:              ${{ secrets.FIREBASE_APP_ID }}
+
+      - name: 4.5. 디버그 스크린샷 아티팩트 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshot
+          path: public/debug_screenshot.png
+          retention-days: 3
 
       - name: 5. JSON 파일 변경사항 커밋 & 푸시
         run: |

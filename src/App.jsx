@@ -67,7 +67,9 @@ export default function App() {
   const [noticeEdit, setNoticeEdit] = useState("");
   const [editingNotice, setEditingNotice] = useState(false);
   const [classEditing, setClassEditing] = useState(false);
-  const [namedGroupModal, setNamedGroupModal] = useState(null); 
+  const [namedGroupModal, setNamedGroupModal] = useState(null);
+  const [joinRequestModal, setJoinRequestModal] = useState(null); // {type, date, slot, applicant?}
+  const [shareJoinSearch, setShareJoinSearch] = useState("");
   const [extraDraft, setExtraDraft] = useState(null);
   const [externalForm, setExternalForm] = useState(null); // null or {nick:"", job:""}
   const [slotAddSearch, setSlotAddSearch] = useState("");
@@ -308,6 +310,33 @@ export default function App() {
     showToast(`${nick} 신청 거절`, "#f97316");
   };
 
+  const handleSubmitJoinRequest = (type, date, slot, applicant) => {
+    // applicant: share view에서 검색으로 선택한 유저. 로그인 상태면 user 사용
+    const requester = applicant || (user ? { nick: user.nick, job: user.job || "" } : null);
+    if (!requester) return;
+    const sd = JSON.parse(JSON.stringify(schedules));
+    if (!sd[type]?.[date]?.[slot]) return;
+    const slotData = sd[type][date][slot];
+    if (slotData.members.find(m => m.nick === requester.nick)) { showToast("이미 참석 중입니다.", "#eab308"); return; }
+    if (slotData.pendingRequests?.find(m => m.nick === requester.nick)) { showToast("이미 신청 중입니다.", "#eab308"); return; }
+    if (slotData.members.length >= maxOf(type)) { showToast("인원이 마감된 방입니다.", "#ef4444"); return; }
+    if (!slotData.pendingRequests) slotData.pendingRequests = [];
+    slotData.pendingRequests.push({ nick: requester.nick, job: requester.job || "" });
+    setSchedules({...sd}); persist(users, sd);
+    setJoinRequestModal(null); setShareJoinSearch("");
+    showToast("✋ 참가 신청 완료! 방장의 승인을 기다려주세요.", "#a78bfa");
+  };
+
+  const handleCancelJoinRequest = (type, date, slot) => {
+    if (!user) return;
+    const sd = JSON.parse(JSON.stringify(schedules));
+    if (!sd[type]?.[date]?.[slot]) return;
+    sd[type][date][slot].pendingRequests =
+      sd[type][date][slot].pendingRequests?.filter(m => m.nick !== user.nick) || [];
+    setSchedules({...sd}); persist(users, sd);
+    showToast("신청을 취소했습니다.", "#f97316");
+  };
+
   const handleLeave = (type, date, slot) => {
     if (!user) return;
     const sd = JSON.parse(JSON.stringify(schedules));
@@ -524,8 +553,8 @@ export default function App() {
   const amIIn = (type, date, slot) =>
     !!(user && getSlotData(schedules, type, date, slot).members?.find(m => m.nick === user.nick));
 
-  // pendingRequests 시스템 제거됨 — 항상 false 반환
-  const amIPending = () => false;
+  const amIPending = (type, date, slot) =>
+    !!(user && getSlotData(schedules, type, date, slot).pendingRequests?.find(m => m.nick === user.nick));
 
   const downloadUsersTxt = () => {
     const lines = users
@@ -538,6 +567,87 @@ export default function App() {
     a.href = url; a.download = "kina_users.txt"; a.click();
     URL.revokeObjectURL(url);
     showToast("TXT 다운로드 완료!", "#22c55e");
+  };
+
+  // 내가 방장인 슬롯 전체 수집
+  const myRooms = React.useMemo(() => {
+    if (!user || user.isAdmin) return [];
+    const rooms = [];
+    for (const [type, dates] of Object.entries(schedules)) {
+      for (const [date, slots] of Object.entries(dates || {})) {
+        for (const [slot, slotData] of Object.entries(slots || {})) {
+          if (slotData.members?.find(m => m.nick === user.nick && m.isLeader)) {
+            rooms.push({ type, date, slot, slotData });
+          }
+        }
+      }
+    }
+    rooms.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return getBaseSlot(a.slot).localeCompare(getBaseSlot(b.slot));
+    });
+    return rooms;
+  }, [schedules, user]);
+
+  const renderMyRooms = () => {
+    if (!user || user.isAdmin || myRooms.length === 0) return null;
+    return (
+      <div style={{marginBottom:24,background:"#0a0a14",border:"1px solid #2d2a4a",borderRadius:16,padding:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+          <span style={{fontSize:15}}>🏠</span>
+          <h3 style={{fontSize:14,fontWeight:700,color:"#c4b5fd"}}>내가 만든 방</h3>
+          <span style={{fontSize:11,color:"#555"}}>({myRooms.length}개)</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
+          {myRooms.map(({type, date, slot, slotData}) => {
+            const max = maxOf(type);
+            const pendingCount = slotData.pendingRequests?.length || 0;
+            const past = !slot.startsWith("party-") && isSlotPast(date, getBaseSlot(slot));
+            const isPartySlot = slot.startsWith("party-");
+            const slotLabel = isPartySlot ? slot.replace("party-","")+"포스" : getBaseSlot(slot);
+            const dObj = DATE_RANGE.find(d => fmtDate(d) === date);
+            const dateLabel = dObj ? fmtLabel(dObj).short : date;
+            const typeLabel = type === "성역" ? raidNames.primary : type === "성역2" ? raidNames.secondary : "추가";
+            return (
+              <div key={`${type}-${date}-${slot}`}
+                onClick={() => {
+                  setSlotModal({type, date, slot});
+                  setEditingNotice(false); setClassEditing(false);
+                  setNoticeEdit(slotData.notice || "");
+                  setSelectedDate(date);
+                }}
+                style={{
+                  background: past ? "#0a0a0a" : "rgba(109,74,255,.1)",
+                  border: `1px solid ${past ? "#1a1a1a" : pendingCount > 0 ? "#a78bfa" : "#2d2a4a"}`,
+                  borderRadius:12, padding:"10px 12px", cursor:"pointer", transition:"all .15s",
+                  opacity: past ? 0.6 : 1, position:"relative"
+                }}
+                onMouseEnter={e=>{if(!past){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(109,74,255,.3)";}}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="none";}}>
+                {pendingCount > 0 && (
+                  <div style={{position:"absolute",top:-6,right:-6,background:"#ef4444",color:"#fff",borderRadius:"50%",
+                    width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>
+                    {pendingCount}
+                  </div>
+                )}
+                <div style={{fontSize:10,color:"#6d4aff",fontWeight:700,marginBottom:3}}>{typeLabel}</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#e2d9f3",marginBottom:2}}>{slotLabel}</div>
+                <div style={{fontSize:11,color:"#555",marginBottom:6}}>{dateLabel}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11,color:slotData.members.length>=max?"#ef4444":"#22c55e",fontWeight:600}}>
+                    {slotData.members.length}/{max}명
+                  </span>
+                  {past && <span style={{fontSize:9,color:"#444"}}>⏱종료</span>}
+                  {!past && pendingCount > 0 && (
+                    <span style={{fontSize:10,color:"#a78bfa",fontWeight:700}}>✋{pendingCount}명 대기</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const renderExtraParties = () => {
@@ -759,7 +869,7 @@ export default function App() {
     const isFull = members.length >= max;
     const past = !slot?.startsWith("party-") && isSlotPast(date, getBaseSlot(slot));
     const isMine = amIIn(type, date, slot);
-    const isPending = amIPending();
+    const isPending = amIPending(type, date, slot);
     const isLeader = amILeader(type, date, slot) || !!(user?.isAdmin);
     const dObj = DATE_RANGE.find(d => fmtDate(d) === date);
     const {short, wd} = dObj ? fmtLabel(dObj) : {short:date, wd:""};
@@ -1004,6 +1114,32 @@ export default function App() {
                   ➕ 레기온외 인원 추가
                 </button>
               )}
+            </div>
+          )}
+
+          {/* 방장 전용: 대기자 승인/거절 */}
+          {isLeader && pending.length > 0 && (
+            <div style={{background:"#0a0a14",border:"1px solid #4a1a7a",borderRadius:12,padding:12,marginBottom:14}}>
+              <p style={{fontSize:12,color:"#a78bfa",fontWeight:700,marginBottom:8}}>✋ 참가 대기중 ({pending.length}명)</p>
+              <div style={{display:"grid",gap:6}}>
+                {pending.map(p => (
+                  <div key={p.nick} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:8,background:"#111120",border:"1px solid #2a2a3a"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{fontSize:20}}>{renderClassIcon(p.job, 24)}</div>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#e2d9f3"}}>{p.nick}</div>
+                        {p.job && <div style={{fontSize:10,color:CLASS_COLORS[p.job]||"#555"}}>{p.job}</div>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>handleApprove(type,date,slot,p.nick)}
+                        style={{padding:"5px 10px",borderRadius:6,border:"none",background:"rgba(34,197,94,.15)",color:"#22c55e",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>승인</button>
+                      <button onClick={()=>handleReject(type,date,slot,p.nick)}
+                        style={{padding:"5px 10px",borderRadius:6,border:"none",background:"rgba(239,68,68,.1)",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>거절</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1457,6 +1593,23 @@ export default function App() {
                                   {unassigned.map(renderPerson)}
                                 </div>
                               )}
+
+                              {/* 신청하기 버튼 (마감·종료 아닌 경우에만) */}
+                              {!isPast && members.length < maxOf(type) && (
+                                <button
+                                  onClick={()=>setJoinRequestModal({type, date:ds, slot, applicant:null})}
+                                  style={{
+                                    width:"100%", marginTop:10, padding:"9px 0",
+                                    borderRadius:10, border:"1px solid #4a2a7a",
+                                    background:"rgba(124,58,237,.12)", color:"#a78bfa",
+                                    cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700,
+                                    transition:"all .2s"
+                                  }}
+                                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(124,58,237,.25)";e.currentTarget.style.borderColor="#7c3aed";}}
+                                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(124,58,237,.12)";e.currentTarget.style.borderColor="#4a2a7a";}}>
+                                  ✋ 참가 신청
+                                </button>
+                              )}
                             </div>
                           );
                         })}
@@ -1468,6 +1621,148 @@ export default function App() {
             </div>
           );
         })}
+      </div>
+    );
+  };
+
+  const renderJoinRequestModal = () => {
+    if (!joinRequestModal) return null;
+    const {type, date, slot, applicant: selectedApplicant} = joinRequestModal;
+    const sd = getSlotData(schedules, type, date, slot);
+    const members = sd.members || [];
+    const leader = members.find(m => m.isLeader);
+    const max = maxOf(type);
+    const dObj = DATE_RANGE.find(d => fmtDate(d) === date);
+    const {short, wd} = dObj ? fmtLabel(dObj) : {short:date, wd:""};
+    const isPartySlot = slot?.startsWith("party-");
+    const slotLabel = isPartySlot
+      ? slot.replace("party-","")+"포스"
+      : slot.includes('#') ? `${getBaseSlot(slot)} · ${slot.split('#')[1]}번 파티` : slot;
+
+    // 로그인 상태면 user 사용, share view(비로그인)면 검색으로 선택
+    const confirmedApplicant = user ? { nick: user.nick, job: user.job || "" } : selectedApplicant;
+
+    const closeModal = () => { setJoinRequestModal(null); setShareJoinSearch(""); };
+
+    return (
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}
+        onClick={e=>{if(e.target===e.currentTarget)closeModal();}}>
+        <div className="mobile-modal" style={{background:"#111120",border:"1px solid #7c3aed55",borderRadius:20,padding:24,maxWidth:420,width:"100%"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <h3 style={{fontSize:16,fontWeight:700,color:"#a78bfa"}}>✋ 참가 신청</h3>
+            <button onClick={closeModal} style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"5px 11px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+          </div>
+
+          {/* 신청 대상 방 정보 */}
+          <div style={{background:"#0a0a14",borderRadius:12,padding:12,marginBottom:12,border:"1px solid #1e1e30"}}>
+            <div style={{fontSize:11,color:"#555",marginBottom:4}}>신청할 방</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#e2d9f3"}}>{slotLabel}</div>
+            <div style={{fontSize:12,color:"#666",marginTop:2}}>{short} ({wd}) · {members.length}/{max}명</div>
+            {leader && <div style={{fontSize:12,color:"#fbbf24",marginTop:4}}>👑 방장: {leader.nick}</div>}
+            {sd.notice && (
+              <div style={{fontSize:11,color:"#fde68a",marginTop:6,padding:"5px 8px",background:"rgba(251,191,36,.06)",borderRadius:6,border:"1px solid rgba(251,191,36,.15)"}}>
+                📌 {sd.notice}
+              </div>
+            )}
+          </div>
+
+          {/* share view: 캐릭터 검색 단계 */}
+          {!user && !confirmedApplicant && (
+            <div style={{background:"#0a0a14",borderRadius:12,padding:12,marginBottom:14,border:"1px solid #1e1e30"}}>
+              <div style={{fontSize:11,color:"#a78bfa",fontWeight:700,marginBottom:8}}>🔍 내 캐릭터 검색</div>
+              <div style={{position:"relative",marginBottom:8}}>
+                <input
+                  value={shareJoinSearch}
+                  onChange={e=>setShareJoinSearch(e.target.value)}
+                  placeholder="닉네임 또는 직업으로 검색..."
+                  autoFocus
+                  style={{width:"100%",padding:"8px 10px 8px 30px",background:"#111120",border:"1px solid #2a2a3a",borderRadius:8,color:"#e2d9f3",fontFamily:"inherit",fontSize:12,outline:"none"}}
+                  onFocus={e=>e.target.style.borderColor="#7c3aed"}
+                  onBlur={e=>e.target.style.borderColor="#2a2a3a"}
+                />
+                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:12}}>🔍</span>
+              </div>
+              {shareJoinSearch && (
+                <div style={{maxHeight:180,overflowY:"auto",display:"grid",gap:4}}>
+                  {users.filter(u =>
+                    (u.nick?.includes(shareJoinSearch)) || (u.job?.includes(shareJoinSearch))
+                  ).slice(0,15).map(u => {
+                    const alreadyIn = members.find(m => m.nick === u.nick);
+                    const alreadyPending = sd.pendingRequests?.find(m => m.nick === u.nick);
+                    return (
+                      <div key={u.nick} onClick={() => {
+                        if (alreadyIn || alreadyPending) return;
+                        setJoinRequestModal({...joinRequestModal, applicant: {nick:u.nick, job:u.job||""}});
+                        setShareJoinSearch("");
+                      }} style={{
+                        display:"flex",alignItems:"center",justifyContent:"space-between",
+                        padding:"7px 10px",borderRadius:8,border:"1px solid #1e1e30",
+                        background: alreadyIn || alreadyPending ? "#0a0a0a" : "#111120",
+                        cursor: alreadyIn || alreadyPending ? "default" : "pointer",
+                        opacity: alreadyIn || alreadyPending ? 0.5 : 1
+                      }}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{fontSize:16}}>{renderClassIcon(u.job, 20)}</div>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:700,color:"#e2d9f3"}}>{u.nick}</div>
+                            {u.job && <div style={{fontSize:10,color:CLASS_COLORS[u.job]||"#555"}}>{u.job}</div>}
+                          </div>
+                        </div>
+                        <span style={{fontSize:10,color:alreadyIn?"#22c55e":alreadyPending?"#a78bfa":"#555"}}>
+                          {alreadyIn ? "참석중" : alreadyPending ? "대기중" : "선택"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {users.filter(u=>(u.nick?.includes(shareJoinSearch))||(u.job?.includes(shareJoinSearch))).length===0 && (
+                    <div style={{fontSize:11,color:"#444",padding:"6px 2px"}}>검색 결과가 없습니다.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 캐릭터 확인 (로그인 상태 or 검색으로 선택 완료) */}
+          {confirmedApplicant && (
+            <div style={{background:"#0a0a14",borderRadius:12,padding:12,marginBottom:16,border:"1px solid #1e1e30"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                <div style={{fontSize:11,color:"#555"}}>신청 캐릭터</div>
+                {!user && (
+                  <button onClick={()=>{setJoinRequestModal({...joinRequestModal,applicant:null});setShareJoinSearch("");}}
+                    style={{fontSize:10,color:"#6d4aff",background:"transparent",border:"none",cursor:"pointer",padding:0}}>
+                    다시 선택
+                  </button>
+                )}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:40,height:40,borderRadius:10,background:"rgba(109,74,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+                  {renderClassIcon(confirmedApplicant.job, 28)}
+                </div>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:"#e2d9f3"}}>{confirmedApplicant.nick}</div>
+                  <div style={{fontSize:12,color:CLASS_COLORS[confirmedApplicant.job]||"#888",marginTop:1}}>{confirmedApplicant.job || "직업 미설정"}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p style={{fontSize:11,color:"#555",marginBottom:14,textAlign:"center"}}>신청 후 방장의 승인이 필요합니다</p>
+          <div className="mobile-col" style={{display:"flex",gap:8}}>
+            <button onClick={closeModal}
+              style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
+            <button
+              disabled={!confirmedApplicant}
+              onClick={()=>handleSubmitJoinRequest(type, date, slot, user ? null : confirmedApplicant)}
+              style={{flex:2,padding:"12px",borderRadius:12,border:"none",
+                background: confirmedApplicant ? "linear-gradient(135deg,#7c3aed,#a78bfa)" : "#1a1a2a",
+                color: confirmedApplicant ? "#fff" : "#444",
+                cursor: confirmedApplicant ? "pointer" : "default",
+                fontFamily:"inherit",fontSize:13,fontWeight:700,
+                boxShadow: confirmedApplicant ? "0 4px 16px rgba(124,58,237,.4)" : "none"}}>
+              ✋ 신청하기
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1491,6 +1786,16 @@ export default function App() {
           group2: rawGroups.group2 || [],
         };
     const allNicks = members.map(m => m.nick);
+    // allNicks 기준으로 필터링: 탈퇴/제거된 멤버의 유령 닉네임을 namedGroups에서 제거
+    if (isExtra) {
+      namedGroups.party1 = namedGroups.party1.filter(n => allNicks.includes(n));
+      namedGroups.party2 = namedGroups.party2.filter(n => allNicks.includes(n));
+      namedGroups.party3 = namedGroups.party3.filter(n => allNicks.includes(n));
+      namedGroups.party4 = namedGroups.party4.filter(n => allNicks.includes(n));
+    } else {
+      namedGroups.group1 = namedGroups.group1.filter(n => allNicks.includes(n));
+      namedGroups.group2 = namedGroups.group2.filter(n => allNicks.includes(n));
+    }
     const assigned = isExtra
       ? [...namedGroups.party1, ...namedGroups.party2, ...namedGroups.party3, ...namedGroups.party4]
       : [...namedGroups.group1, ...namedGroups.group2];
@@ -1764,12 +2069,14 @@ export default function App() {
             setLoginError("");
           }}
         >
-          {tab==="schedule" && renderGrid("성역")}
-          {tab==="schedule2" && renderGrid("성역2")}
-          {tab==="extra" && renderExtraParties()}
+          {tab==="schedule" && <>{renderMyRooms()}{renderGrid("성역")}</>}
+          {tab==="schedule2" && <>{renderMyRooms()}{renderGrid("성역2")}</>}
+          {tab==="extra" && <>{renderMyRooms()}{renderExtraParties()}</>}
           {tab==="admin" && user?.isAdmin && renderAdmin()}
         </MainLayout>
       )}
+
+      {renderJoinRequestModal()}
 
       {extraDraft && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:16}}
