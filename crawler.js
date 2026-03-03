@@ -10,32 +10,31 @@ import fs from 'fs';
   
   await page.setViewport({ width: 1280, height: 1080 });
 
-  // 1. 실제 사용자(크롬 브라우저)처럼 보이도록 설정 추가
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
   await page.setExtraHTTPHeaders({
     'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
   });
+
+  // 브라우저 내부 로그를 터미널로 가져오기 (에러 추적용)
+  page.on('console', msg => console.log('🌐 브라우저 내부:', msg.text()));
 
   const url = 'https://www.aion2tool.com/region/%EB%B0%94%EB%B0%94%EB%A3%BD/%ED%82%A4%EB%82%98';
   console.log('페이지 접속 중...');
   
   await page.goto(url, { waitUntil: 'networkidle2' });
 
-
   try {
-    // 3. 넉넉하게 15초(15000ms) 대기하도록 수정
-    await page.waitForSelector('a.nickname-link', { timeout: 30000 });
+    await page.waitForSelector('a.nickname-link', { timeout: 15000 });
   } catch (error) {
-    console.log('데이터 로딩 지연 중... (GitHub에서 debug_screenshot.png를 확인해 보세요)');
+    console.log('데이터 로딩 지연 중...');
   }
 
-  console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다 (약 30초 소요)...');
+  console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다 (약 5초 소요)...');
   await autoScroll(page);
   
-  await new Promise(resolve => setTimeout(resolve, 6000));
+  // 스크롤 후 데이터가 자리 잡을 수 있게 조금 넉넉히 대기
+  await new Promise(resolve => setTimeout(resolve, 8000));
 
-  console.log('데이터 추출 시작...');
-    // 2. 접속 직후의 화면을 캡처하여 원인 분석 (public 폴더에 저장)
   console.log('서버 접속 화면 스크린샷 저장 중...');
   try {
     await page.screenshot({ path: './public/debug_screenshot.png', fullPage: true });
@@ -43,22 +42,35 @@ import fs from 'fs';
   } catch (err) {
     console.log('❌ 스크린샷 저장 실패:', err.message);
   }
+
+  console.log('데이터 추출 시작...');
   
   const extractedArray = await page.evaluate(() => {
     const rows = document.querySelectorAll('tbody tr'); 
+    console.log(`탐색된 전체 줄(tr) 개수: ${rows.length}개`); // 내부 로그 확인용
+
     const dataList = [];
     const seenNicknames = new Set(); 
 
     rows.forEach(row => {
-      if (row.offsetParent === null) return; 
+      // 🚨 새롭게 적용된 숨김 데이터 필터링 (GitHub 환경에서도 안전하게 작동)
+      // 1. CSS로 완전히 숨겨진 경우 제외
+      const style = window.getComputedStyle(row);
+      if (style.display === 'none' || style.visibility === 'hidden') return;
+      
+      // 2. 화면에 공간을 차지하지 않는(크기가 0인) 투명 요소 제외
+      const rect = row.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
 
       const nicknameEl = row.querySelector('a.nickname-link');
       if (!nicknameEl) return; 
       
-      const nickname = nicknameEl.getAttribute('data-nickname').trim();
+      const nickname = nicknameEl.getAttribute('data-nickname');
+      if (!nickname) return;
+      const cleanNickname = nickname.trim();
 
-      if (seenNicknames.has(nickname)) return;
-      seenNicknames.add(nickname);
+      if (seenNicknames.has(cleanNickname)) return;
+      seenNicknames.add(cleanNickname);
 
       const tds = row.querySelectorAll('td');
       const job = tds[3] ? tds[3].innerText.trim() : ''; 
@@ -66,7 +78,7 @@ import fs from 'fs';
       const combatPower = tds[5] ? tds[5].innerText.trim().replace(/,/g, '') : '';
 
       dataList.push({
-        nick: nickname,
+        nick: cleanNickname,
         job: job,
         atul: atoolScore,
         ilv: combatPower,
@@ -95,7 +107,7 @@ async function autoScroll(page) {
   await page.evaluate(async () => {
     await new Promise((resolve) => {
       let totalHeight = 0;
-      let distance = 100;
+      let distance = 300; 
       let timer = setInterval(() => {
         let scrollHeight = document.body.scrollHeight;
         window.scrollBy(0, distance);
