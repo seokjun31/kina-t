@@ -21,7 +21,21 @@ import fs from 'fs';
   
   await page.goto(url, { waitUntil: 'networkidle2' });
 
-  // 2. 접속 직후의 화면을 캡처하여 원인 분석 (public 폴더에 저장)
+
+  try {
+    // 3. 넉넉하게 15초(15000ms) 대기하도록 수정
+    await page.waitForSelector('a.nickname-link', { timeout: 30000 });
+  } catch (error) {
+    console.log('데이터 로딩 지연 중... (GitHub에서 debug_screenshot.png를 확인해 보세요)');
+  }
+
+  console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다 (약 30초 소요)...');
+  await autoScroll(page);
+  
+  await new Promise(resolve => setTimeout(resolve, 6000));
+
+  console.log('데이터 추출 시작...');
+    // 2. 접속 직후의 화면을 캡처하여 원인 분석 (public 폴더에 저장)
   console.log('서버 접속 화면 스크린샷 저장 중...');
   try {
     await page.screenshot({ path: './public/debug_screenshot.png', fullPage: true });
@@ -29,20 +43,6 @@ import fs from 'fs';
   } catch (err) {
     console.log('❌ 스크린샷 저장 실패:', err.message);
   }
-
-  try {
-    // 3. 넉넉하게 15초(15000ms) 대기하도록 수정
-    await page.waitForSelector('a.nickname-link', { timeout: 15000 });
-  } catch (error) {
-    console.log('데이터 로딩 지연 중... (GitHub에서 debug_screenshot.png를 확인해 보세요)');
-  }
-
-  console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다 (약 2~3초 소요)...');
-  await autoScroll(page);
-  
-  await new Promise(resolve => setTimeout(resolve, 6000));
-
-  console.log('데이터 추출 시작...');
   
   const extractedArray = await page.evaluate(() => {
     const rows = document.querySelectorAll('tbody tr'); 
