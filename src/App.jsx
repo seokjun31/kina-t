@@ -75,6 +75,9 @@ export default function App() {
   const [slotAddSearch, setSlotAddSearch] = useState("");
   const [adminCode, setAdminCode] = useState(ADMIN_CODE);
   const [raidNames, setRaidNames] = useState({ primary:"성역", secondary:"성역2" });
+  const [partyMoveModal, setPartyMoveModal] = useState(null); // {type, date, slot}
+  const [partyMoveDest, setPartyMoveDest] = useState({date:"", slot:""});
+  const [clearSlotConfirm, setClearSlotConfirm] = useState(null); // {type, date, slot, displaySlot}
 
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -471,6 +474,29 @@ export default function App() {
       console.error("관리자 설정 저장 실패:", e);
       showToast("설정 저장에 실패했습니다.", "#ef4444");
     }
+  };
+
+  const handlePartyMove = () => {
+    if (!partyMoveModal || !partyMoveDest.date || !partyMoveDest.slot) return;
+    const {type, date: fromDate, slot: fromSlot} = partyMoveModal;
+    const {date: toDate, slot: toSlot} = partyMoveDest;
+    if (fromDate === toDate && getBaseSlot(fromSlot) === toSlot) { showToast("같은 시간대입니다.", "#eab308"); return; }
+    if (isSlotPast(toDate, toSlot)) { showToast("이미 지난 시간대입니다.", "#ef4444"); return; }
+    const sd = JSON.parse(JSON.stringify(schedules));
+    const fromData = sd[type]?.[fromDate]?.[fromSlot];
+    if (!fromData || fromData.members.length === 0) { showToast("이동할 인원이 없습니다.", "#eab308"); return; }
+    const members = [...fromData.members];
+    const origNotice = fromData.notice || "";
+    const targetSlot = getNextAvailableSlot(sd, type, toDate, toSlot);
+    if (!targetSlot) { showToast("목적지에 빈 방이 없습니다. (최대 10개)", "#ef4444"); return; }
+    sd[type][fromDate][fromSlot] = {members:[], pendingRequests:[], notice:"", requiredClasses:[], namedGroups:{group1:[],group2:[]}};
+    if (!sd[type][toDate]) sd[type][toDate] = {};
+    sd[type][toDate][targetSlot] = {members, pendingRequests:[], notice:origNotice, requiredClasses:[], namedGroups:{group1:[],group2:[]}};
+    setSchedules({...sd}); persist(users, sd);
+    setPartyMoveModal(null); setPartyMoveDest({date:"", slot:""});
+    setSlotModal({type, date:toDate, slot:targetSlot});
+    setEditingNotice(false); setClassEditing(false); setNoticeEdit(origNotice);
+    showToast("파티 이동 완료!", "#22c55e");
   };
 
   const handleAdminAdd = (type, date, slot, nick) => {
@@ -1168,6 +1194,15 @@ export default function App() {
               <div style={{flex:1,padding:"13px",borderRadius:12,background:"rgba(239,68,68,.08)",border:"1px solid #7f1d1d",color:"#ef4444",textAlign:"center",fontSize:13,fontWeight:700}}>🔴 마감된 시간대입니다</div>
             )}
           </div>
+          {amILeader(type,date,slot) && !past && !isPartySlot && members.length > 0 && (
+            <button
+              onClick={()=>{setPartyMoveModal({type,date,slot});setPartyMoveDest({date:"",slot:""}); setSlotModal(null);}}
+              style={{width:"100%",marginTop:8,padding:"11px",borderRadius:12,border:"1px solid #4a3aaa",background:"rgba(109,74,255,.1)",color:"#a78bfa",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,transition:"all .2s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(109,74,255,.22)";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="rgba(109,74,255,.1)";}}>
+              📦 파티 이동
+            </button>
+          )}
           {past && (
             <div style={{padding:"13px",borderRadius:12,background:"#0a0a0a",border:"1px solid #1a1a1a",color:"#333",textAlign:"center",fontSize:13}}>⏱ 종료된 시간대입니다</div>
           )}
@@ -1381,7 +1416,7 @@ export default function App() {
                                 style={{background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>+ 추가</button>
                               <button onClick={()=>setNamedGroupModal({type,date:ds,slot})}
                                 style={{background:"rgba(34,197,94,.12)",border:"1px solid rgba(34,197,94,.4)",color:"#4ade80",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>🏠 파티분배</button>
-                              <button onClick={()=>{ if(window.confirm(`${displaySlot} 전체 강퇴?`)) handleAdminClearSlot(type,ds,slot); }}
+                              <button onClick={()=>setClearSlotConfirm({type, date:ds, slot, displaySlot})}
                                 style={{background:"rgba(127,29,29,.3)",border:"1px solid #7f1d1d",color:"#fca5a5",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11}}>전체강퇴</button>
                             </div>
                           </div>
@@ -1529,6 +1564,7 @@ export default function App() {
                           // 대시보드 사용자 목록: 아이디 / 직업만 렌더링 (외부 인원은 이름+클래스만 표시)
                           const renderPerson = (m) => {
                             if (!m) return null;
+                            const uInfo = !m.isExternal ? getUserInfo(m.nick) : null;
                             return (
                               <div key={m.nick} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
                                 <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -1536,6 +1572,7 @@ export default function App() {
                                   <span className="share-nick" style={{color:m.isExternal?"#9ca3af":m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:500,fontSize:13}}>{m.nick}{m.isExternal?" (외)":""}</span>
                                 </div>
                                 {m.job && <span style={{color:CLASS_COLORS[m.job]||"#9ca3af",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>{m.job}</span>}
+                                {uInfo?.atul && <span style={{color:"#a78bfa",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>아툴 {uInfo.atul}</span>}
                               </div>
                             );
                           };
@@ -1991,6 +2028,91 @@ export default function App() {
     );
   };
 
+  const renderPartyMoveModal = () => {
+    if (!partyMoveModal) return null;
+    const {type, date: fromDate, slot: fromSlot} = partyMoveModal;
+    const sd = getSlotData(schedules, type, fromDate, fromSlot);
+    const members = sd.members || [];
+    const baseFromSlot = getBaseSlot(fromSlot);
+    const dObj = DATE_RANGE.find(d => fmtDate(d) === fromDate);
+    const {short: fromShort, wd: fromWd} = dObj ? fmtLabel(dObj) : {short:fromDate, wd:""};
+    const futureDates = DATE_RANGE.filter(d => fmtDate(d) >= TODAY_STR);
+    const canConfirm = !!(partyMoveDest.date && partyMoveDest.slot &&
+      !(partyMoveDest.date === fromDate && partyMoveDest.slot === baseFromSlot));
+    const closeModal = () => { setPartyMoveModal(null); setPartyMoveDest({date:"", slot:""}); };
+    return (
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}
+        onClick={e=>{if(e.target===e.currentTarget)closeModal();}}>
+        <div className="mobile-modal" style={{background:"#111120",border:"1px solid #6d4aff55",borderRadius:20,padding:24,maxWidth:440,width:"100%",maxHeight:"88vh",overflowY:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <h3 style={{fontSize:16,fontWeight:700,color:"#a78bfa"}}>📦 파티 이동</h3>
+            <button onClick={closeModal} style={{background:"transparent",border:"1px solid #2a2a3a",color:"#666",borderRadius:8,padding:"5px 11px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+          </div>
+          <div style={{background:"#0a0a14",borderRadius:12,padding:12,marginBottom:16,border:"1px solid #1e1e30"}}>
+            <div style={{fontSize:11,color:"#555",marginBottom:4}}>현재 파티</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#c4b5fd"}}>{baseFromSlot} · {fromShort} ({fromWd})</div>
+            <div style={{fontSize:12,color:"#666",marginTop:3}}>{members.length}명 전원 이동</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8}}>
+              {members.map(m => (
+                <span key={m.nick} style={{fontSize:11,background:"rgba(109,74,255,.15)",border:"1px solid #2d2a4a",borderRadius:20,padding:"2px 8px",color:"#c4b5fd"}}>
+                  {m.isLeader?"👑 ":""}{m.nick}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:11,color:"#a78bfa",fontWeight:700,marginBottom:8}}>이동할 날짜</p>
+            <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4}}>
+              {futureDates.map(d => {
+                const ds = fmtDate(d);
+                const {short, wd} = fmtLabel(d);
+                const isToday = ds === TODAY_STR;
+                const isWed = d.getDay() === 3;
+                const active = partyMoveDest.date === ds;
+                return (
+                  <button key={ds} onClick={()=>setPartyMoveDest(prev=>({...prev, date:ds}))}
+                    style={{flexShrink:0,minWidth:56,padding:"8px 6px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",
+                      background: active?"linear-gradient(135deg,#6d4aff,#8b68ff)":"#13131f",
+                      color: active?"#fff":isToday?"#c4b5fd":"#555",
+                      boxShadow: active?"0 4px 12px rgba(109,74,255,.4)":"none",
+                      outline: isToday&&!active?"1px solid #3d2a6e":"none"}}>
+                    <div style={{fontSize:9,marginBottom:2,color:active?"rgba(255,255,255,.7)":isWed?"#f97316":"inherit"}}>{wd}{isWed?" 🌙":""}</div>
+                    <div style={{fontSize:12,fontWeight:700}}>{short}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{marginBottom:20}}>
+            <p style={{fontSize:11,color:"#a78bfa",fontWeight:700,marginBottom:8}}>이동할 시간대</p>
+            <select
+              value={partyMoveDest.slot}
+              onChange={e=>setPartyMoveDest(prev=>({...prev, slot:e.target.value}))}
+              style={{width:"100%",padding:"10px 12px",background:"#13131f",border:"1px solid #2a2a3a",borderRadius:10,color:partyMoveDest.slot?"#e2d9f3":"#555",fontFamily:"inherit",fontSize:13,cursor:"pointer",outline:"none"}}>
+              <option value="">시간대 선택...</option>
+              {SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="mobile-col" style={{display:"flex",gap:8}}>
+            <button onClick={closeModal}
+              style={{flex:1,padding:"12px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
+            <button
+              disabled={!canConfirm}
+              onClick={handlePartyMove}
+              style={{flex:2,padding:"12px",borderRadius:12,border:"none",
+                background: canConfirm?"linear-gradient(135deg,#6d4aff,#a78bfa)":"#1a1a2a",
+                color: canConfirm?"#fff":"#444",
+                cursor: canConfirm?"pointer":"default",
+                fontFamily:"inherit",fontSize:13,fontWeight:700,
+                boxShadow: canConfirm?"0 4px 16px rgba(109,74,255,.4)":"none"}}>
+              📦 이동하기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div style={{minHeight:"100vh",background:"#08080f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:24,fontFamily:"'Noto Sans KR',sans-serif"}}>
@@ -2144,6 +2266,24 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {clearSlotConfirm && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16}}>
+          <div className="mobile-modal" style={{background:"#111120",border:"1px solid rgba(239,68,68,.3)",borderRadius:20,padding:28,maxWidth:330,width:"100%",textAlign:"center"}}>
+            <div style={{fontSize:38,marginBottom:14}}>⚠️</div>
+            <h3 style={{color:"#ef4444",fontSize:17,fontWeight:700,marginBottom:10}}>전체 강퇴</h3>
+            <p style={{color:"#888",fontSize:13,lineHeight:1.6,marginBottom:22}}>
+              <strong style={{color:"#fca5a5",fontSize:15}}>{clearSlotConfirm.displaySlot}</strong><br/>의 인원을 전원 강퇴하시겠습니까?
+            </p>
+            <div className="mobile-col" style={{display:"flex",gap:8}}>
+              <button onClick={()=>setClearSlotConfirm(null)} style={{flex:1,padding:"11px",borderRadius:12,border:"1px solid #2a2a3a",background:"transparent",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>취소</button>
+              <button onClick={()=>{handleAdminClearSlot(clearSlotConfirm.type,clearSlotConfirm.date,clearSlotConfirm.slot);setClearSlotConfirm(null);}} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:"rgba(127,29,29,.8)",color:"#fca5a5",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>전체강퇴</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renderPartyMoveModal()}
     </div>
   );
 }
