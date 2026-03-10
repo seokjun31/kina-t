@@ -1572,7 +1572,7 @@ export default function App() {
                                   <span className="share-nick" style={{color:m.isExternal?"#9ca3af":m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:500,fontSize:13}}>{m.nick}{m.isExternal?" (외)":""}</span>
                                 </div>
                                 {m.job && <span style={{color:CLASS_COLORS[m.job]||"#9ca3af",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>{m.job}</span>}
-                                {uInfo?.atul && <span style={{color:"#a78bfa",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>아툴 {uInfo.atul}</span>}
+                                {uInfo?.atul && <span style={{color:"#a78bfa",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>아툴 {(()=>{const v=parseInt(String(uInfo.atul).replace(/,/g,""),10);return Number.isFinite(v)&&v>0?v.toLocaleString("ko-KR"):uInfo.atul;})()}</span>}
                               </div>
                             );
                           };
