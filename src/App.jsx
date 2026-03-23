@@ -56,7 +56,13 @@ export default function App() {
   const [schedules, setSchedules] = useState({"성역":{},"성역2":{},"추가":{}});
 
   const [tab, setTab] = useState(savedSession?.isAdmin ? "admin" : "schedule");
-  const [selectedDate, setSelectedDate] = useState(TODAY_STR);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('kina_selectedDate');
+      if (saved && DATE_RANGE.some(d => fmtDate(d) === saved)) return saved;
+    } catch {}
+    return TODAY_STR;
+  });
   const [slotModal, setSlotModal] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
   const [kickConfirm, setKickConfirm] = useState(null);
@@ -189,8 +195,12 @@ export default function App() {
   }, []);
 
   const persist = useCallback(async (u, s) => {
-    await save("kina:users", u);
-    await save("kina:schedules", s);
+    try {
+      await save("kina:users", u);
+      await save("kina:schedules", s);
+    } catch (e) {
+      console.error("데이터 저장 실패:", e);
+    }
   }, []);
 
   const isSlotClosed = (type, dateStr, slot) => {
@@ -620,6 +630,7 @@ export default function App() {
                   setEditingNotice(false); setClassEditing(false);
                   setNoticeEdit(slotData.notice || "");
                   setSelectedDate(date);
+                  try { sessionStorage.setItem('kina_selectedDate', date); } catch {}
                 }}
                 style={{
                   background: past ? "#0a0a0a" : "rgba(109,74,255,.1)",
@@ -763,7 +774,7 @@ export default function App() {
             const myCount = Object.values(schedules[type]?.[ds] || {})
               .filter(sd => sd.members?.find(m => m.nick === user?.nick)).length;
             return (
-              <button key={ds} onClick={() => setSelectedDate(ds)} style={{
+              <button key={ds} onClick={() => { setSelectedDate(ds); try { sessionStorage.setItem('kina_selectedDate', ds); } catch {} }} style={{
                 flexShrink:0, minWidth:62, padding:"10px 10px", borderRadius:12, border:"none", cursor:"pointer",
                 background: active ? "linear-gradient(135deg,#6d4aff,#8b68ff)" : "#13131f",
                 color: active ? "#fff" : today ? "#c4b5fd" : "#555",
