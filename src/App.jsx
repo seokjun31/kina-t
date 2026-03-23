@@ -720,7 +720,7 @@ export default function App() {
                           <span style={{fontWeight:700,color:"#fbbf24",fontSize:13}}>{leader.nick}</span>
                           {leader.job && <span style={{fontSize:11,color:"#555"}}>{leader.job}</span>}
                         </div>
-                        {(() => { const u=users.find(u=>u.nick===leader.nick); return (!leader.isExternal && u?.atul)?<span style={{fontSize:10,color:"#a78bfa"}}>아툴 {u.atul}</span>:null; })()}
+                        {(() => { const u=users.find(u=>u.nick===leader.nick); return (!leader.isExternal && u?.atul)?<span style={{fontSize:10,color:"#a78bfa"}}>전투력 {u.atul}</span>:null; })()}
                       </div>
                     </div>
                   ) : (
@@ -734,7 +734,7 @@ export default function App() {
                         <div key={m.nick} style={{background:m.isLeader?"rgba(251,191,36,.1)":"#0a0a14",border:`1px solid ${m.isLeader?"rgba(251,191,36,.3)":"#1e1e30"}`,borderRadius:12,padding:"6px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:80}}>
                           <span style={{color:m.isLeader?"#fbbf24":"#e2d9f3",fontSize:13,fontWeight:700}}>{m.nick}</span>
                           {m.job && <span style={{color:CLASS_COLORS[m.job]||"#555",fontSize:11}}>{m.job}</span>}
-                          {!m.isExternal && u?.atul && <span style={{color:"#a78bfa",fontSize:11,fontWeight:600}}>아툴 {u.atul}</span>}
+                          {!m.isExternal && u?.atul && <span style={{color:"#a78bfa",fontSize:11,fontWeight:600}}>전투력 {u.atul}</span>}
                           {m.isExternal && <span style={{fontSize:9,color:"#888",fontWeight:600}}>(외부)</span>}
                         </div>
                       );
@@ -954,7 +954,7 @@ export default function App() {
                             {leader.job && <span style={{fontSize:13,color:"#e5e7eb",fontWeight:600}}>{leader.job}</span>}
                             {leader.nick===user?.nick && <span style={{background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:20}}>나</span>}
                           </div>
-                          {(() => { const uInfo = users.find(u => u.nick === leader.nick); return uInfo?.atul ? <div style={{fontSize:13,color:"#a78bfa",marginTop:4,fontWeight:600}}>아툴 {uInfo.atul}</div> : null; })()}
+                          {(() => { const uInfo = users.find(u => u.nick === leader.nick); return uInfo?.atul ? <div style={{fontSize:13,color:"#a78bfa",marginTop:4,fontWeight:600}}>전투력 {uInfo.atul}</div> : null; })()}
                         </div>
                       </>
                     ) : (
@@ -990,7 +990,7 @@ export default function App() {
                               <div style={{fontSize:isPartySlot?16:22}}>{renderClassIcon(m.job, isPartySlot?20:28)}</div>
                               <div style={{fontSize:isPartySlot?10:12,fontWeight:700,color:"#e2d9f3",textAlign:"center",lineHeight:1.3}}>{m.nick}</div>
                               {m.job && <div style={{fontSize:9,color:CLASS_COLORS[m.job]||"#555",fontWeight:600}}>{m.isExternal?`${m.job} (외)`:m.job}</div>}
-                              {!m.isExternal && (() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>아툴 {uInfo.atul}</div> : null; })()}
+                              {!m.isExternal && (() => { const uInfo = users.find(u => u.nick === m.nick); return uInfo?.atul ? <div style={{fontSize:9,color:"#a78bfa",fontWeight:600}}>전투력 {uInfo.atul}</div> : null; })()}
                               {m.nick===user?.nick && (
                                 <span style={{fontSize:9,background:"rgba(109,74,255,.2)",border:"1px solid #6d4aff",color:"#a78bfa",padding:"1px 5px",borderRadius:10}}>나</span>
                               )}
@@ -1276,7 +1276,7 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                      <div style={{fontSize:12,color:"#555"}}>아툴 <span style={{color:"#a78bfa",fontWeight:600}}>{u.atul||"-"}</span></div>
+                      <div style={{fontSize:12,color:"#555"}}>전투력 <span style={{color:"#a78bfa",fontWeight:600}}>{u.atul||"-"}</span></div>
                       <div style={{fontSize:12,color:"#555"}}>아이템Lv <span style={{color:"#a78bfa",fontWeight:600}}>{u.ilv||"-"}</span></div>
                       <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                         <div style={{fontSize:11,color:hasActiveCode?"#22c55e":"#555",fontWeight:700}}>
@@ -1406,7 +1406,7 @@ export default function App() {
                                     <span style={{color:m.isLeader?"#fbbf24":"#c4b5fd",fontWeight:m.isLeader?700:500}}>{m.nick}</span>
                                     {m.job&&<span style={{color:"#555",fontSize:10}}>{m.job}</span>}
                                   </div>
-                                  {uInfo?.atul&&<span style={{color:"#a78bfa",fontSize:9}}>아툴 {uInfo.atul}</span>}
+                                  {uInfo?.atul&&<span style={{color:"#a78bfa",fontSize:9}}>전투력 {uInfo.atul}</span>}
                                 </div>
                               );
                             })}
@@ -1541,7 +1541,7 @@ export default function App() {
                                   <span className="share-nick" style={{color:m.isExternal?"#9ca3af":m.isLeader?"#fef9c3":"#e5e7eb",fontWeight:m.isLeader?700:500,fontSize:13}}>{m.nick}{m.isExternal?" (외)":""}</span>
                                 </div>
                                 {m.job && <span style={{color:CLASS_COLORS[m.job]||"#9ca3af",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>{m.job}</span>}
-                                {uInfo?.atul && <span style={{color:"#a78bfa",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>아툴 {(()=>{const v=parseInt(String(uInfo.atul).replace(/,/g,""),10);return Number.isFinite(v)&&v>0?v.toLocaleString("ko-KR"):uInfo.atul;})()}</span>}
+                                {uInfo?.atul && <span style={{color:"#a78bfa",fontSize:11,borderLeft:"1px solid #374151",paddingLeft:8}}>전투력 {(()=>{const v=parseInt(String(uInfo.atul).replace(/,/g,""),10);return Number.isFinite(v)&&v>0?v.toLocaleString("ko-KR"):uInfo.atul;})()}</span>}
                               </div>
                             );
                           };
@@ -1582,7 +1582,7 @@ export default function App() {
                                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4,marginBottom:6}}>
                                         <div style={{fontSize:12,color:"#e5e7eb",fontWeight:700}}>{party.label}</div>
                                         <div style={{fontSize:11,color:avg?"#38bdf8":"#4b5563"}}>
-                                          {avg ? `아툴 평균 ${avg}` : "아툴 정보 없음"}
+                                          {avg ? `전투력 평균 ${avg}` : "전투력 정보 없음"}
                                         </div>
                                       </div>
                                       {group.length > 0 ? group.map(renderPerson) : (
@@ -1919,7 +1919,7 @@ export default function App() {
           <div style={{flex:1}}>
             <div style={{fontSize:12,fontWeight:700,color:member.isLeader?"#fbbf24":"#e2d9f3"}}>{member.isLeader?"👑 ":""}{nick}</div>
             <div style={{fontSize:10,color:CLASS_COLORS[member.job]||"#555"}}>{member.job}</div>
-            {uInfo?.atul && <div style={{fontSize:9,color:"#a78bfa"}}>아툴 {uInfo.atul}</div>}
+            {uInfo?.atul && <div style={{fontSize:9,color:"#a78bfa"}}>전투력 {uInfo.atul}</div>}
           </div>
         </div>
       );
