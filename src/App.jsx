@@ -56,7 +56,7 @@ export default function App() {
   const [schedules, setSchedules] = useState({"성역":{},"성역2":{},"추가":{}});
 
   const [tab, setTab] = useState(savedSession?.isAdmin ? "admin" : "schedule");
-  const [selectedDate, setSelectedDate] = useState(fmtDate(DATE_RANGE[0]));
+  const [selectedDate, setSelectedDate] = useState(TODAY_STR);
   const [slotModal, setSlotModal] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
   const [kickConfirm, setKickConfirm] = useState(null);
