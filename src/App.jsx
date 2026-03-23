@@ -537,10 +537,12 @@ export default function App() {
       notice: extraDraft.notice
     };
     setSchedules({...sd}); persist(users, sd);
+    const _notice = extraDraft.notice || "";
     setExtraDraft(null);
-    setSlotModal({type, date:today, slot:partySlot});
-    setEditingNotice(false); setClassEditing(false); setNoticeEdit(extraDraft.notice||"");
+    setEditingNotice(false); setClassEditing(false); setNoticeEdit(_notice);
     showToast("파티 생성 완료! 방장이 되었습니다 👑", "#fbbf24");
+    // extraDraft 모달 언마운트 후 slotModal 마운트 (같은 렌더 사이클 충돌 방지)
+    setTimeout(() => setSlotModal({type, date:today, slot:partySlot}), 0);
   };
 
 
