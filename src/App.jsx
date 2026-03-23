@@ -168,7 +168,15 @@ export default function App() {
         }
 
         const s = await load("kina:schedules");
-        if (s) setSchedules(s);
+        if (s) {
+          setSchedules(s);
+        } else {
+          // Firestore 로드 실패 시 localStorage 백업에서 복원
+          try {
+            const backup = localStorage.getItem('kina_schedules_backup');
+            if (backup) setSchedules(JSON.parse(backup));
+          } catch {}
+        }
 
         try {
           const cfg = await load("kina:config");
@@ -195,12 +203,10 @@ export default function App() {
   }, []);
 
   const persist = useCallback(async (u, s) => {
-    try {
-      await save("kina:users", u);
-      await save("kina:schedules", s);
-    } catch (e) {
-      console.error("데이터 저장 실패:", e);
-    }
+    // localStorage에 즉시 백업 (동기, F5 타이밍 문제 방지)
+    try { localStorage.setItem('kina_schedules_backup', JSON.stringify(s)); } catch {}
+    // Firestore에 병렬 저장 (순차 저장 대비 시간 절반)
+    await Promise.all([save("kina:users", u), save("kina:schedules", s)]);
   }, []);
 
   const isSlotClosed = (type, dateStr, slot) => {
