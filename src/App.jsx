@@ -135,15 +135,6 @@ export default function App() {
       let hasError = false;
       try {
         let savedUsers = await load("kina:users") || [];
-        const nowMs = Date.now();
-        const cleanedSavedUsers = savedUsers.map(u => {
-          if (!u.accessCode || !u.codeExpiresAt) return { ...u, accessCode:null, codeExpiresAt:null };
-          const expMs = new Date(u.codeExpiresAt).getTime();
-          if (!expMs || expMs <= nowMs) {
-            return { ...u, accessCode:null, codeExpiresAt:null };
-          }
-          return u;
-        });
 
         try {
           const res = await fetch('/aion2_legion_data.json');
@@ -152,27 +143,22 @@ export default function App() {
 
           if (crawledData && crawledData.length > 0) {
             const mergedUsers = crawledData.map(crawledUser => {
-              const existingUser = cleanedSavedUsers.find(u => u.nick === crawledUser.nick);
+              const existingUser = savedUsers.find(u => u.nick === crawledUser.nick);
               return {
                 ...crawledUser,
                 accessCode: existingUser?.accessCode || null,
-                codeExpiresAt: existingUser?.codeExpiresAt || null,
+                codeExpiresAt: null,
               };
-            }).map(u => {
-              if (!u.accessCode || !u.codeExpiresAt) return { ...u, accessCode:null, codeExpiresAt:null };
-              const expMs = new Date(u.codeExpiresAt).getTime();
-              if (!expMs || expMs <= nowMs) return { ...u, accessCode:null, codeExpiresAt:null };
-              return u;
             });
 
             setUsers(mergedUsers);
             await save("kina:users", mergedUsers); 
           } else {
-            setUsers(cleanedSavedUsers.length > 0 ? cleanedSavedUsers : DEFAULT_USERS);
+            setUsers(savedUsers.length > 0 ? savedUsers : DEFAULT_USERS);
           }
         } catch (error) {
           console.error("크롤링 데이터 불러오기 실패:", error);
-          setUsers(cleanedSavedUsers.length > 0 ? cleanedSavedUsers : DEFAULT_USERS);
+          setUsers(savedUsers.length > 0 ? savedUsers : DEFAULT_USERS);
         }
 
         const s = await load("kina:schedules");
@@ -233,12 +219,7 @@ export default function App() {
       console.error("최신 유저 정보 조회 실패", e);
     }
 
-    const nowMs = Date.now();
-    const found = currentUsers.find(u => 
-      u.accessCode?.toUpperCase() === v && 
-      u.codeExpiresAt && 
-      new Date(u.codeExpiresAt).getTime() > nowMs
-    );
+    const found = currentUsers.find(u => u.accessCode?.toUpperCase() === v);
     
     if (found) {
       localStorage.setItem('kina_session', JSON.stringify({...found, loginAt:Date.now()}));
@@ -438,13 +419,11 @@ export default function App() {
   };
 
   const handleGenerateAccessCode = (nick) => {
-    const now = new Date();
-    const expires = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
-    const newCode = genCode().toUpperCase(); 
+    const newCode = genCode().toUpperCase();
     const nextUsers = users.map(u => u.nick === nick ? {
       ...u,
       accessCode: newCode,
-      codeExpiresAt: expires.toISOString(),
+      codeExpiresAt: null,
     } : u);
     setUsers(nextUsers);
     persist(nextUsers, schedules);
@@ -1278,22 +1257,15 @@ export default function App() {
             {filteredUsers.length===0 && <div style={{textAlign:"center",padding:40,color:"#2a2a3a"}}>검색 결과 없음</div>}
             <div style={{display:"grid",gap:8}}>
               {(() => {
-                const nowMs = Date.now();
                 const sorted = [...filteredUsers].sort((a,b) => {
-                  const aExp = a.codeExpiresAt ? new Date(a.codeExpiresAt).getTime() : 0;
-                  const bExp = b.codeExpiresAt ? new Date(b.codeExpiresAt).getTime() : 0;
-                  const aActive = a.accessCode && aExp > nowMs;
-                  const bActive = b.accessCode && bExp > nowMs;
-                  if (aActive && bActive) return aExp - bExp;
+                  const aActive = !!a.accessCode;
+                  const bActive = !!b.accessCode;
                   if (aActive && !bActive) return -1;
                   if (!aActive && bActive) return 1;
                   return (a.nick || "").localeCompare(b.nick || "");
                 });
                 return sorted.map(u => {
-                const nowMs = Date.now();
-                const expMs = u.codeExpiresAt ? new Date(u.codeExpiresAt).getTime() : 0;
-                const hasActiveCode = !!(u.accessCode && expMs && expMs > nowMs);
-                const expLabel = hasActiveCode ? new Date(u.codeExpiresAt).toLocaleDateString("ko-KR", { month:"2-digit", day:"2-digit"}) : null;
+                const hasActiveCode = !!u.accessCode;
                 return (
                   <div key={u.nick} style={{background:"#111120",border:"1px solid #1e1e30",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",flexWrap:"wrap",gap:12}}>
                     <div style={{flex:1,display:"flex",alignItems:"center",gap:12}}>
@@ -1310,9 +1282,6 @@ export default function App() {
                         <div style={{fontSize:11,color:hasActiveCode?"#22c55e":"#555",fontWeight:700}}>
                           {hasActiveCode ? `ON · ${u.accessCode}` : "OFF"}
                         </div>
-                        {hasActiveCode && expLabel && (
-                          <div style={{fontSize:10,color:"#888"}}>만료: {expLabel}</div>
-                        )}
                         <button
                           onClick={() => hasActiveCode ? handleDeleteAccessCode(u.nick) : handleGenerateAccessCode(u.nick)}
                           style={{
