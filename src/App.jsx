@@ -148,17 +148,25 @@ export default function App() {
           const crawledData = await res.json();
 
           if (crawledData && crawledData.length > 0) {
+            const crawledNicks = new Set(crawledData.map(u => u.nick));
             const mergedUsers = crawledData.map(crawledUser => {
               const existingUser = savedUsers.find(u => u.nick === crawledUser.nick);
               return {
                 ...crawledUser,
                 accessCode: existingUser?.accessCode || null,
-                codeExpiresAt: null,
+                codeExpiresAt: existingUser?.codeExpiresAt || null,
               };
             });
 
+            // 크롤링에 누락된 기존 유저도 보존 (코드 소실 방지)
+            savedUsers.forEach(savedUser => {
+              if (!crawledNicks.has(savedUser.nick) && savedUser.accessCode) {
+                mergedUsers.push(savedUser);
+              }
+            });
+
             setUsers(mergedUsers);
-            await save("kina:users", mergedUsers); 
+            await save("kina:users", mergedUsers);
           } else {
             setUsers(savedUsers.length > 0 ? savedUsers : DEFAULT_USERS);
           }
