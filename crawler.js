@@ -48,10 +48,8 @@ import fs from 'fs';
     console.log('데이터 로딩 지연 중...');
   }
 
-  console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다 (약 5초 소요)...');
-  await autoScroll(page);
-  
-  await new Promise(resolve => setTimeout(resolve, 5000));
+  console.log('숨겨진 인원을 불러오기 위해 화면을 스크롤합니다...');
+  await scrollUntilAllLoaded(page);
 
   console.log('서버 접속 화면 스크린샷 저장 중...');
   try {
@@ -140,29 +138,32 @@ import fs from 'fs';
   await browser.close();
 })();
 
-async function autoScroll(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => {
-      let previousHeight = 0;
-      let stableCount = 0;
-      let distance = 300;
+async function scrollUntilAllLoaded(page, maxAttempts = 30) {
+  let previousCount = 0;
+  let stableRounds = 0;
 
-      let timer = setInterval(() => {
-        window.scrollBy(0, distance);
-        let currentHeight = document.body.scrollHeight;
+  for (let i = 0; i < maxAttempts; i++) {
+    // 페이지 끝까지 스크롤
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    // 동적 로딩 대기
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-        if (currentHeight === previousHeight) {
-          stableCount++;
-          // 높이가 5회 연속 변하지 않으면 모든 데이터 로드 완료로 판단
-          if (stableCount >= 5) {
-            clearInterval(timer);
-            resolve();
-          }
-        } else {
-          stableCount = 0;
-          previousHeight = currentHeight;
-        }
-      }, 300);
-    });
-  });
+    const currentCount = await page.evaluate(() =>
+      document.querySelectorAll('a.nickname-link').length
+    );
+    console.log(`스크롤 ${i + 1}회차: 현재 로드된 인원 ${currentCount}명`);
+
+    if (currentCount === previousCount) {
+      stableRounds++;
+      // 3회 연속 인원수 변동 없으면 전부 로드된 것으로 판단
+      if (stableRounds >= 3) {
+        console.log(`✅ 인원수 안정화 완료 (${currentCount}명)`);
+        return;
+      }
+    } else {
+      stableRounds = 0;
+      previousCount = currentCount;
+    }
+  }
+  console.log(`⚠️ 최대 시도 횟수 도달, 현재 ${previousCount}명 로드됨`);
 }
