@@ -143,18 +143,26 @@ import fs from 'fs';
 async function autoScroll(page) {
   await page.evaluate(async () => {
     await new Promise((resolve) => {
-      let totalHeight = 0;
-      let distance = 300; 
-      let timer = setInterval(() => {
-        let scrollHeight = document.body.scrollHeight;
-        window.scrollBy(0, distance);
-        totalHeight += distance;
+      let previousHeight = 0;
+      let stableCount = 0;
+      let distance = 300;
 
-        if (totalHeight >= scrollHeight - window.innerHeight) {
-          clearInterval(timer);
-          resolve();
+      let timer = setInterval(() => {
+        window.scrollBy(0, distance);
+        let currentHeight = document.body.scrollHeight;
+
+        if (currentHeight === previousHeight) {
+          stableCount++;
+          // 높이가 5회 연속 변하지 않으면 모든 데이터 로드 완료로 판단
+          if (stableCount >= 5) {
+            clearInterval(timer);
+            resolve();
+          }
+        } else {
+          stableCount = 0;
+          previousHeight = currentHeight;
         }
-      }, 100);
+      }, 300);
     });
   });
 }
