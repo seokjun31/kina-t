@@ -4,846 +4,846 @@
     "job": "치유성",
     "atul": "919078",
     "ilv": "5719",
-    "code": "OE6O"
+    "code": "A78O"
   },
   {
     "nick": "범키",
     "job": "수호성",
     "atul": "915377",
     "ilv": "5917",
-    "code": "XESJ"
+    "code": "P1A4"
   },
   {
     "nick": "마카",
     "job": "마도성",
     "atul": "887960",
     "ilv": "5867",
-    "code": "P4DO"
+    "code": "GEUC"
   },
   {
     "nick": "정천",
     "job": "검성",
     "atul": "886880",
     "ilv": "5704",
-    "code": "LWX9"
+    "code": "6DN7"
   },
   {
     "nick": "슈팍",
     "job": "검성",
     "atul": "882552",
     "ilv": "5847",
-    "code": "XE1G"
+    "code": "SSIX"
   },
   {
     "nick": "씨캬",
     "job": "마도성",
     "atul": "876770",
     "ilv": "5811",
-    "code": "F66T"
+    "code": "OMP5"
   },
   {
     "nick": "결계",
     "job": "호법성",
     "atul": "865805",
     "ilv": "5679",
-    "code": "Z64N"
+    "code": "H5J7"
   },
   {
     "nick": "퀵스",
     "job": "호법성",
     "atul": "864591",
     "ilv": "5719",
-    "code": "1CP5"
+    "code": "HNGK"
   },
   {
     "nick": "멸악",
     "job": "마도성",
     "atul": "863248",
     "ilv": "5659",
-    "code": "MZ8A"
+    "code": "9MER"
   },
   {
     "nick": "기둥",
     "job": "치유성",
     "atul": "859066",
     "ilv": "5715",
-    "code": "E2W4"
+    "code": "L1O1"
   },
   {
     "nick": "딧",
     "job": "검성",
     "atul": "858235",
     "ilv": "5693",
-    "code": "IAMV"
+    "code": "L1V6"
   },
   {
     "nick": "이렐",
     "job": "궁성",
     "atul": "853103",
     "ilv": "5634",
-    "code": "SHA9"
+    "code": "KXOR"
   },
   {
     "nick": "컴백",
     "job": "수호성",
     "atul": "842362",
     "ilv": "5798",
-    "code": "DN0Q"
+    "code": "RV05"
   },
   {
     "nick": "용부",
     "job": "궁성",
     "atul": "836024",
     "ilv": "5669",
-    "code": "IKIV"
+    "code": "O67J"
   },
   {
     "nick": "seo",
     "job": "치유성",
     "atul": "829961",
     "ilv": "5831",
-    "code": "2S49"
+    "code": "1EOB"
   },
   {
     "nick": "기사단장",
     "job": "수호성",
-    "atul": "823612",
+    "atul": "823810",
     "ilv": "5444",
-    "code": "4VJX"
+    "code": "E0PM"
   },
   {
     "nick": "뚝배기",
     "job": "검성",
     "atul": "821777",
     "ilv": "5624",
-    "code": "CC9O"
+    "code": "TJ3P"
   },
   {
     "nick": "지나갈게현",
     "job": "호법성",
     "atul": "821264",
     "ilv": "5631",
-    "code": "P9UJ"
+    "code": "0XQK"
   },
   {
     "nick": "주리",
     "job": "검성",
     "atul": "811338",
     "ilv": "5688",
-    "code": "8L3U"
+    "code": "4P5F"
   },
   {
     "nick": "고고짱",
     "job": "치유성",
     "atul": "806080",
     "ilv": "5591",
-    "code": "YIK0"
+    "code": "H59L"
   },
   {
     "nick": "KD",
     "job": "살성",
     "atul": "804266",
     "ilv": "5536",
-    "code": "OQ14"
+    "code": "6PP2"
   },
   {
     "nick": "초대",
     "job": "치유성",
     "atul": "803553",
     "ilv": "5608",
-    "code": "I20J"
+    "code": "O06T"
   },
   {
     "nick": "리딩",
     "job": "수호성",
     "atul": "797985",
     "ilv": "5763",
-    "code": "I4C1"
+    "code": "DF38"
   },
   {
     "nick": "단꿈",
     "job": "호법성",
     "atul": "793049",
     "ilv": "5682",
-    "code": "B88C"
+    "code": "8JII"
   },
   {
     "nick": "멱살",
     "job": "검성",
     "atul": "792620",
     "ilv": "5770",
-    "code": "U7KY"
+    "code": "G05U"
   },
   {
     "nick": "오이네우스",
     "job": "치유성",
     "atul": "785940",
     "ilv": "5451",
-    "code": "EP80"
+    "code": "Q7XG"
   },
   {
     "nick": "카직스",
     "job": "살성",
     "atul": "783234",
     "ilv": "5449",
-    "code": "JA39"
+    "code": "B2V3"
   },
   {
     "nick": "바바룽도령",
     "job": "마도성",
     "atul": "770055",
     "ilv": "5476",
-    "code": "00DK"
+    "code": "4CBI"
   },
   {
     "nick": "가딘",
     "job": "궁성",
     "atul": "769905",
     "ilv": "5599",
-    "code": "UE0T"
+    "code": "EIBU"
+  },
+  {
+    "nick": "봄결",
+    "job": "치유성",
+    "atul": "760221",
+    "ilv": "5434",
+    "code": "HSX4"
   },
   {
     "nick": "여보",
     "job": "검성",
     "atul": "758879",
     "ilv": "5510",
-    "code": "1MSO"
+    "code": "7CCN"
   },
   {
     "nick": "자이자이자식아",
     "job": "살성",
     "atul": "754143",
     "ilv": "5523",
-    "code": "NAK4"
+    "code": "IVCP"
   },
   {
     "nick": "미녀유미",
     "job": "살성",
     "atul": "753489",
     "ilv": "5437",
-    "code": "5LHX"
+    "code": "WPLF"
   },
   {
     "nick": "한하란",
     "job": "궁성",
     "atul": "753290",
     "ilv": "5657",
-    "code": "389W"
+    "code": "0AKJ"
   },
   {
     "nick": "뱸",
     "job": "호법성",
     "atul": "749362",
     "ilv": "5413",
-    "code": "XME1"
-  },
-  {
-    "nick": "봄결",
-    "job": "치유성",
-    "atul": "744861",
-    "ilv": "5409",
-    "code": "J3DR"
+    "code": "0RIN"
   },
   {
     "nick": "코몽",
     "job": "검성",
     "atul": "742944",
     "ilv": "5146",
-    "code": "YWP7"
+    "code": "WGSI"
   },
   {
     "nick": "폭류",
     "job": "궁성",
     "atul": "736123",
     "ilv": "5223",
-    "code": "PU99"
+    "code": "IGEO"
   },
   {
     "nick": "바커스",
     "job": "궁성",
     "atul": "734287",
     "ilv": "5416",
-    "code": "KKB1"
+    "code": "OK15"
   },
   {
     "nick": "선은",
     "job": "마도성",
     "atul": "733662",
     "ilv": "5294",
-    "code": "ZX1X"
+    "code": "J525"
   },
   {
     "nick": "웅짱",
     "job": "검성",
     "atul": "730784",
     "ilv": "5397",
-    "code": "Y4PV"
+    "code": "0N2T"
   },
   {
     "nick": "한세연",
     "job": "호법성",
     "atul": "725403",
     "ilv": "5208",
-    "code": "X2OH"
+    "code": "RRW3"
   },
   {
     "nick": "원스휴먼",
     "job": "치유성",
     "atul": "722344",
     "ilv": "5561",
-    "code": "SER7"
+    "code": "A1OF"
   },
   {
     "nick": "서대보",
     "job": "궁성",
     "atul": "716200",
     "ilv": "5203",
-    "code": "AZXP"
+    "code": "ZKQD"
   },
   {
     "nick": "도꾸",
     "job": "마도성",
     "atul": "712664",
     "ilv": "5283",
-    "code": "N04J"
+    "code": "ZEMB"
   },
   {
     "nick": "월드스타",
     "job": "궁성",
     "atul": "712604",
     "ilv": "5317",
-    "code": "A33H"
+    "code": "KBD7"
   },
   {
     "nick": "까망이",
     "job": "치유성",
     "atul": "712416",
     "ilv": "5492",
-    "code": "OPBW"
+    "code": "IAKC"
   },
   {
     "nick": "조말자",
     "job": "마도성",
     "atul": "711382",
     "ilv": "5367",
-    "code": "BP52"
+    "code": "HW9E"
   },
   {
     "nick": "KFC",
     "job": "호법성",
     "atul": "707186",
     "ilv": "5246",
-    "code": "NN23"
+    "code": "S7Q9"
   },
   {
     "nick": "븨욘",
     "job": "살성",
     "atul": "706808",
     "ilv": "5046",
-    "code": "79DE"
+    "code": "AEXF"
   },
   {
     "nick": "오르카",
     "job": "마도성",
     "atul": "701156",
     "ilv": "5359",
-    "code": "X7NH"
+    "code": "SBJG"
   },
   {
     "nick": "사월향",
     "job": "호법성",
     "atul": "701051",
     "ilv": "5259",
-    "code": "NZD4"
+    "code": "FIPT"
   },
   {
     "nick": "싱싱한고등어",
     "job": "수호성",
     "atul": "699744",
     "ilv": "5429",
-    "code": "EG4R"
+    "code": "GM7L"
   },
   {
     "nick": "홍다다",
     "job": "치유성",
     "atul": "690763",
     "ilv": "5544",
-    "code": "REBE"
+    "code": "TQB9"
   },
   {
     "nick": "구이홍",
     "job": "호법성",
     "atul": "662374",
     "ilv": "4917",
-    "code": "ZCB2"
+    "code": "JW0W"
   },
   {
     "nick": "궁니르",
     "job": "궁성",
     "atul": "652316",
     "ilv": "4932",
-    "code": "5FCD"
+    "code": "EKZ4"
   },
   {
     "nick": "디버퍼잉어",
     "job": "호법성",
     "atul": "647632",
     "ilv": "5055",
-    "code": "1DKN"
+    "code": "JZKS"
   },
   {
     "nick": "칼딘",
     "job": "살성",
     "atul": "647305",
     "ilv": "4873",
-    "code": "VPZO"
+    "code": "3WS3"
   },
   {
     "nick": "용인",
     "job": "검성",
-    "atul": "640388",
+    "atul": "640553",
     "ilv": "5120",
-    "code": "3YIF"
+    "code": "QBHX"
   },
   {
     "nick": "봉고",
     "job": "수호성",
     "atul": "636373",
     "ilv": "5168",
-    "code": "6H8G"
+    "code": "KIFO"
   },
   {
     "nick": "한현",
     "job": "검성",
     "atul": "631405",
     "ilv": "4853",
-    "code": "0948"
+    "code": "48TJ"
   },
   {
     "nick": "여프로디테",
     "job": "수호성",
     "atul": "615196",
     "ilv": "4994",
-    "code": "0QB0"
+    "code": "FO90"
   },
   {
     "nick": "한세아",
     "job": "치유성",
     "atul": "604877",
     "ilv": "4768",
-    "code": "GQIW"
+    "code": "XUN0"
   },
   {
     "nick": "때리지마족",
     "job": "호법성",
     "atul": "604613",
     "ilv": "5231",
-    "code": "NYKJ"
+    "code": "UAI3"
   },
   {
     "nick": "ad157",
     "job": "살성",
     "atul": "600045",
     "ilv": "4752",
-    "code": "KR1Q"
+    "code": "Q53R"
   },
   {
     "nick": "조필연",
     "job": "궁성",
     "atul": "598860",
     "ilv": "4874",
-    "code": "GXS0"
+    "code": "ZFZD"
   },
   {
     "nick": "최강한화이글스",
     "job": "치유성",
     "atul": "592825",
     "ilv": "4857",
-    "code": "JMP0"
+    "code": "GVYU"
   },
   {
     "nick": "아시타카",
     "job": "궁성",
     "atul": "583105",
     "ilv": "4682",
-    "code": "2VNS"
+    "code": "17MF"
   },
   {
     "nick": "샤네루",
     "job": "치유성",
     "atul": "559819",
     "ilv": "5121",
-    "code": "PG6O"
+    "code": "RHVF"
   },
   {
     "nick": "탱탱한고등어",
     "job": "마도성",
     "atul": "554149",
     "ilv": "4652",
-    "code": "PCZ7"
+    "code": "XEOF"
   },
   {
     "nick": "연아돌",
     "job": "치유성",
     "atul": "545551",
     "ilv": "5070",
-    "code": "A2R0"
+    "code": "9K4V"
   },
   {
     "nick": "곰도리",
     "job": "수호성",
     "atul": "528392",
     "ilv": "4230",
-    "code": "NG6T"
+    "code": "OK3B"
   },
   {
     "nick": "스란",
     "job": "궁성",
     "atul": "522044",
     "ilv": "4371",
-    "code": "DBKI"
+    "code": "VKUT"
   },
   {
     "nick": "티파니앤코",
     "job": "치유성",
     "atul": "519033",
     "ilv": "4393",
-    "code": "D6Y9"
+    "code": "0V28"
   },
   {
     "nick": "다이자뿌쓰요",
     "job": "궁성",
     "atul": "508873",
     "ilv": "4268",
-    "code": "QPDP"
+    "code": "6SVA"
   },
   {
     "nick": "쓰리고",
     "job": "수호성",
     "atul": "505861",
     "ilv": "4702",
-    "code": "KJCO"
+    "code": "BOPD"
   },
   {
     "nick": "우투리",
     "job": "수호성",
     "atul": "503607",
     "ilv": "4120",
-    "code": "1WN4"
+    "code": "0Q0S"
   },
   {
     "nick": "개아련",
     "job": "치유성",
     "atul": "500040",
     "ilv": "4236",
-    "code": "VWWT"
+    "code": "KCRD"
   },
   {
     "nick": "아산시매콤보이",
     "job": "치유성",
     "atul": "497832",
     "ilv": "4269",
-    "code": "621P"
+    "code": "87DS"
   },
   {
     "nick": "식블드",
     "job": "궁성",
     "atul": "486162",
     "ilv": "4118",
-    "code": "MS0L"
+    "code": "5KYM"
   },
   {
     "nick": "폭권성",
     "job": "권성",
     "atul": "472877",
     "ilv": "4584",
-    "code": "GMFL"
+    "code": "0D7V"
   },
   {
     "nick": "룡암",
     "job": "권성",
     "atul": "463636",
     "ilv": "4817",
-    "code": "Y452"
+    "code": "KYZR"
   },
   {
     "nick": "무딘",
     "job": "검성",
     "atul": "462424",
     "ilv": "3968",
-    "code": "939N"
+    "code": "MY6K"
   },
   {
     "nick": "혜응",
     "job": "궁성",
     "atul": "455451",
     "ilv": "4048",
-    "code": "EGOH"
+    "code": "DQE3"
   },
   {
     "nick": "수원",
     "job": "호법성",
     "atul": "452439",
     "ilv": "4042",
-    "code": "L6ID"
+    "code": "NKLK"
   },
   {
     "nick": "지지직",
     "job": "궁성",
     "atul": "443416",
     "ilv": "4791",
-    "code": "1QZX"
+    "code": "G2ZE"
   },
   {
     "nick": "낀깡",
     "job": "궁성",
     "atul": "441538",
     "ilv": "3919",
-    "code": "67ZT"
+    "code": "75QJ"
   },
   {
     "nick": "고길똥",
     "job": "검성",
     "atul": "428898",
     "ilv": "3850",
-    "code": "R0KC"
+    "code": "QJAX"
   },
   {
     "nick": "전장",
     "job": "치유성",
     "atul": "419326",
     "ilv": "4392",
-    "code": "TBW0"
+    "code": "JGIR"
   },
   {
     "nick": "호성수",
     "job": "수호성",
     "atul": "414704",
     "ilv": "3942",
-    "code": "NSQ4"
+    "code": "E0OF"
   },
   {
     "nick": "자연산고등어",
     "job": "궁성",
     "atul": "411301",
     "ilv": "4404",
-    "code": "XZNJ"
+    "code": "AXCE"
   },
   {
     "nick": "키퍼",
     "job": "궁성",
     "atul": "406345",
     "ilv": "3827",
-    "code": "ANQH"
+    "code": "5IXV"
   },
   {
     "nick": "HamJJick",
     "job": "호법성",
     "atul": "402470",
     "ilv": "3880",
-    "code": "O03P"
+    "code": "7C6L"
   },
   {
     "nick": "왕숙",
     "job": "마도성",
     "atul": "379029",
     "ilv": "3649",
-    "code": "BDU9"
+    "code": "LGK2"
   },
   {
     "nick": "너굴2",
     "job": "수호성",
     "atul": "365951",
     "ilv": "3613",
-    "code": "B9LQ"
+    "code": "L3ZJ"
   },
   {
     "nick": "벨라짱",
     "job": "권성",
     "atul": "341680",
     "ilv": "4269",
-    "code": "0O8K"
+    "code": "SXXZ"
   },
   {
     "nick": "똥꼬찢어",
     "job": "살성",
     "atul": "335363",
     "ilv": "3583",
-    "code": "19RY"
+    "code": "K9I5"
   },
   {
     "nick": "세븐스타",
     "job": "호법성",
     "atul": "329892",
     "ilv": "3773",
-    "code": "7SB8"
+    "code": "EDMR"
   },
   {
     "nick": "힐뽀",
     "job": "치유성",
     "atul": "328945",
     "ilv": "3901",
-    "code": "FRH7"
+    "code": "4U4N"
   },
   {
     "nick": "호스트문의",
     "job": "검성",
     "atul": "328701",
     "ilv": "3620",
-    "code": "0IA9"
+    "code": "ZDIE"
   },
   {
     "nick": "골드스타",
     "job": "치유성",
     "atul": "321253",
     "ilv": "3585",
-    "code": "O7FS"
+    "code": "F312"
   },
   {
     "nick": "반건조고등어",
     "job": "호법성",
     "atul": "307286",
     "ilv": "3457",
-    "code": "6PI4"
+    "code": "H0O4"
   },
   {
     "nick": "제이미",
     "job": "치유성",
     "atul": "305898",
     "ilv": "3601",
-    "code": "UB46"
+    "code": "U07E"
   },
   {
     "nick": "푸딘",
     "job": "치유성",
     "atul": "286231",
     "ilv": "3730",
-    "code": "M3B9"
+    "code": "CMHA"
   },
   {
     "nick": "성금화",
     "job": "호법성",
     "atul": "272137",
     "ilv": "3587",
-    "code": "RWNK"
+    "code": "YOPP"
   },
   {
     "nick": "산두왕님",
     "job": "치유성",
     "atul": "267074",
     "ilv": "3566",
-    "code": "W1EE"
+    "code": "NP96"
   },
   {
     "nick": "앞으로디테",
     "job": "치유성",
     "atul": "258127",
     "ilv": "3316",
-    "code": "KDY5"
+    "code": "I6H6"
   },
   {
     "nick": "여대",
     "job": "치유성",
     "atul": "248835",
     "ilv": "3500",
-    "code": "47VC"
+    "code": "IKYR"
   },
   {
     "nick": "참다랑어",
     "job": "정령성",
     "atul": "224725",
     "ilv": "3317",
-    "code": "2NW8"
+    "code": "9XTF"
   },
   {
     "nick": "순살참고등어",
     "job": "치유성",
     "atul": "223316",
     "ilv": "3291",
-    "code": "9L64"
+    "code": "USM2"
   },
   {
     "nick": "고고",
     "job": "마도성",
     "atul": "222412",
     "ilv": "3265",
-    "code": "VKN8"
+    "code": "9JOU"
   },
   {
     "nick": "도꽁",
     "job": "검성",
     "atul": "220851",
     "ilv": "3253",
-    "code": "NC3V"
+    "code": "I80S"
   },
   {
     "nick": "힐힐힐힐힐힐",
     "job": "치유성",
     "atul": "218136",
     "ilv": "3528",
-    "code": "MDJ9"
+    "code": "O8BF"
   },
   {
     "nick": "호법식",
     "job": "호법성",
     "atul": "218078",
     "ilv": "3221",
-    "code": "C9TA"
+    "code": "BYQX"
   },
   {
     "nick": "겨르계",
     "job": "치유성",
     "atul": "211485",
     "ilv": "3155",
-    "code": "2Z41"
+    "code": "P8CQ"
   },
   {
     "nick": "신우짱",
     "job": "수호성",
     "atul": "205344",
     "ilv": "3176",
-    "code": "3CQ6"
+    "code": "STUX"
   },
   {
     "nick": "세라투스",
     "job": "마도성",
     "atul": "201197",
     "ilv": "3082",
-    "code": "YCN4"
+    "code": "6C33"
   },
   {
     "nick": "츄쨩",
     "job": "치유성",
     "atul": "167786",
     "ilv": "2882",
-    "code": "AQ12"
+    "code": "UQ5Q"
   },
   {
     "nick": "령혼",
     "job": "정령성",
     "atul": "159306",
     "ilv": "2923",
-    "code": "RYUB"
+    "code": "QV34"
   },
   {
     "nick": "정백",
     "job": "살성",
     "atul": "157478",
     "ilv": "2812",
-    "code": "VJ8O"
+    "code": "X7E8"
   },
   {
     "nick": "여기힐러",
     "job": "치유성",
     "atul": "143943",
     "ilv": "2965",
-    "code": "IJ9S"
+    "code": "BYP0"
   },
   {
     "nick": "정교",
     "job": "정령성",
     "atul": "126486",
     "ilv": "2474",
-    "code": "NQPA"
+    "code": "P8CC"
   }
 ]
